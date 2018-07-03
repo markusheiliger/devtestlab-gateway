@@ -180,7 +180,7 @@ namespace TokenFactory
         }
 
         [FunctionName("CreateToken")]
-        public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/users/{userId}")]HttpRequest req, TraceWriter log, ExecutionContext executionContext, string subscriptionId, string userId, string resourceGroupName, string labName, string virtualMachineName)
+        public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/users/{userId}")]HttpRequest req, TraceWriter log, ExecutionContext executionContext, string subscriptionId, string userId, string resourceGroupName, string labName, string virtualMachineName)
         {
             log.Info("C# HTTP trigger function processed a request.");
 
