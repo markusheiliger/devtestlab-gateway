@@ -97,29 +97,23 @@
     },
     "resources": [
         {
-            "name": "[variables('deployFunctionInit')]",
-            "type": "Microsoft.Resources/deployments",
-            "apiVersion": "2015-01-01",
+            "apiVersion": "2015-06-15",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "name": "[variables('pipName')]",
+            "location": "[resourceGroup().location]",
             "properties": {
-                "mode": "Incremental",
-                "templateLink": {
-                    "uri": "[concat(parameters('_artifactsLocation'), '/azuredeploy-function.json', parameters('_artifactsLocationSasToken'))]",
-                    "contentVersion": "1.0.0.0"
-                },
-                "parameters": {
-                    "resourcePrefix": {
-                        "value": "[variables('resourcePrefix')]"
-                    }
+                "publicIPAllocationMethod": "Static",
+                "dnsSettings": {
+                    "domainNameLabel": "[variables('resourcePrefix')]"
                 }
             }
         },
         {
-            "name": "[variables('deployFunctionUpdate')]",
+            "name": "[variables('deployFunctionInit')]",
             "type": "Microsoft.Resources/deployments",
             "apiVersion": "2015-01-01",
             "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSign'))]",
-                "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSSL'))]"
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
             ],
             "properties": {
                 "mode": "Incremental",
@@ -130,6 +124,34 @@
                 "parameters": {
                     "resourcePrefix": {
                         "value": "[variables('resourcePrefix')]"
+                    },
+                    "gatewayIp": {
+                        "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))).ipAddress]"
+                    }
+                }
+            }
+        },
+        {
+            "name": "[variables('deployFunctionUpdate')]",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2015-01-01",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSign'))]",
+                "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSSL'))]",
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(parameters('_artifactsLocation'), '/azuredeploy-function.json', parameters('_artifactsLocationSasToken'))]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "resourcePrefix": {
+                        "value": "[variables('resourcePrefix')]"
+                    },
+                    "gatewayIp": {
+                        "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))).ipAddress]"
                     },
                     "signCertificateUrl": {
                         "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSign'))).secretUriWithVersion]"
@@ -157,7 +179,7 @@
                 "accessPolicies": [
                     {
                         "tenantId": "[reference(resourceId('Microsoft.Resources/deployments', variables('deployFunctionInit'))).outputs.tenantId.value]",
-                        "objectId": "[reference(resourceId('Microsoft.Resources/deployments', variables('deployFunctionInit'))).outputs.objectId.value]",
+                        "objectId": "[reference(resourceId('Microsoft.Resources/deployments', variables('deployFunctionInit'))).outputs.principalId.value]",
                         "permissions": {
                             "secrets": [
                                 "get"
@@ -208,18 +230,6 @@
                         }
                     }
                 ]
-            }
-        },
-        {
-            "apiVersion": "2015-06-15",
-            "type": "Microsoft.Network/publicIPAddresses",
-            "name": "[variables('pipName')]",
-            "location": "[resourceGroup().location]",
-            "properties": {
-                "publicIPAllocationMethod": "Static",
-                "dnsSettings": {
-                    "domainNameLabel": "[variables('resourcePrefix')]"
-                }
             }
         },
         {
@@ -375,9 +385,13 @@
         }
     ],
     "outputs": {
-        "gatewayPublicIp":{
+        "tenantId": {
             "type": "string",
-            "value": "[reference(variables('pipID')).ipAddress]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', variables('deployFunctionInit'))).outputs.tenantId.value]"
+        },
+        "principalId": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', variables('deployFunctionInit'))).outputs.principalId.value]"
         }
     }
 }

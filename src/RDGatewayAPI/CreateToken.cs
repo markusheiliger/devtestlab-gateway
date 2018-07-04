@@ -1,29 +1,24 @@
-
-using System.IO;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Azure.WebJobs.Host;
-using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Globalization;
 using System.Linq;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Azure.KeyVault;
-using Microsoft.Azure.KeyVault.Models;
-using Microsoft.Azure.Services.AppAuthentication;
-using System.Threading.Tasks;
+using System.Net;
+using System.Net.Http;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Threading.Tasks;
 using Flurl;
 using Flurl.Http;
-using Newtonsoft.Json.Linq;
-using System.Text;
-using System.Security.Cryptography;
-using System.Globalization;
-using System.Net;
-using System.Collections.Generic;
+using Microsoft.Azure.KeyVault;
+using Microsoft.Azure.Services.AppAuthentication;
+using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.WebJobs.Host;
+using Newtonsoft.Json;
 
-namespace TokenFactory
+namespace RDGatewayAPI
 {
     public static class CreateToken
     {
@@ -50,14 +45,18 @@ namespace TokenFactory
                 var signCertificateSecret = await keyVaultClient.GetSecretAsync(context.SignCertificateUrl);
                 var signCertificateBuffer = Convert.FromBase64String(signCertificateSecret.Value);
 
+                context.Log.Info($"Downloaded certificate from KeyVault ({signCertificateBuffer.Length} bytes)");
+
                 // unwrap the json data envelope
                 var envelope = JsonConvert.DeserializeAnonymousType(Encoding.UTF8.GetString(signCertificateBuffer), new { data = string.Empty, password = string.Empty });
 
                 // return the certificate
-                return new X509Certificate2(Convert.FromBase64String(envelope.data), envelope.password);
+                return new X509Certificate2(Convert.FromBase64String(envelope.data), envelope.password, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
             }
             catch (Exception exc)
             {
+                context.Log.Error(exc.Message, exc);
+
                 throw new Exception($"Failed to load certificate from KeyVault by URL '{context.SignCertificateUrl}'", exc);
             }
         }
@@ -137,9 +136,7 @@ namespace TokenFactory
                 throw new ArgumentNullException(nameof(certificate));
             }
 
-            // get the RSA provider from the private key for token signing
-            //var rsa = (certificate.PrivateKey as RSACryptoServiceProvider) ?? throw new NotSupportedException($"The certificate {certificate.Thumbprint} doesn't support the RSACryptoServiceProvider.");
-            
+
             // request token for Azure communication
             var azureToken = await AzureManagementApiTokenProvider.GetAccessTokenAsync(AZURE_MANAGEMENT_API);
 
@@ -158,7 +155,6 @@ namespace TokenFactory
             // create the machine token and sign the data
             var machineToken = string.Format(CultureInfo.InvariantCulture, MACHINE_TOKEN_PATTERN, rdpEndPoint.Host, rdpEndPoint.Port, GetPosixLifetime());
             var machineTokenBuffer = Encoding.ASCII.GetBytes(machineToken);
-            //var machineTokenSignature = rsa.SignData(machineTokenBuffer, CryptoConfig.CreateFromName("SHA"));
             var machineTokenSignature = certificate.GetRSAPrivateKey().SignData(machineTokenBuffer, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
             // wrap the machine token
@@ -180,7 +176,7 @@ namespace TokenFactory
         }
 
         [FunctionName("CreateToken")]
-        public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/users/{userId}")]HttpRequest req, TraceWriter log, ExecutionContext executionContext, string subscriptionId, string userId, string resourceGroupName, string labName, string virtualMachineName)
+        public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/users/{userId}")]HttpRequestMessage req, TraceWriter log, ExecutionContext executionContext, string subscriptionId, string userId, string resourceGroupName, string labName, string virtualMachineName)
         {
             log.Info("C# HTTP trigger function processed a request.");
 
@@ -188,7 +184,7 @@ namespace TokenFactory
 
             try
             {
-                requestContext = new RequestContext(executionContext)
+                requestContext = new RequestContext(executionContext, log)
                 {
                     Properties = new RequestProperties()
                     {
@@ -204,9 +200,9 @@ namespace TokenFactory
             }
             catch (Exception exc)
             {
-                log.Error($"Failed to validate request {executionContext.InvocationId}", exc);
+                log.Error($"Failed to validate request {executionContext.InvocationId}: {exc.StackTrace.ToString()}", exc);
 
-                return new BadRequestResult();
+                return req.CreateResponse(HttpStatusCode.BadRequest);
             }
 
             try
@@ -217,39 +213,39 @@ namespace TokenFactory
                 // get the signed authentication token
                 var token = await GetTokenAsync(requestContext, certificate);
 
-                return new OkObjectResult(token);
+                return req.CreateResponse(HttpStatusCode.OK, token);
             }
             catch (Exception exc)
             {
-                log.Error($"Failed to process request {executionContext.InvocationId}", exc);
+                log.Error($"Failed to process request {executionContext.InvocationId}: {exc.StackTrace.ToString()}", exc);
 
-                return new StatusCodeResult(500);
+                return req.CreateResponse(HttpStatusCode.InternalServerError);
             }
         }
 
         private class RequestContext
         {
-            public RequestContext(ExecutionContext executionContext)
+            public RequestContext(ExecutionContext executionContext, TraceWriter log)
             {
-                if (executionContext == null)
-                {
-                    throw new ArgumentNullException(nameof(executionContext));
-                }
+                // init execution context
+                ExecutionContext = executionContext ?? throw new ArgumentNullException(nameof(executionContext));
 
-                Configuration = new ConfigurationBuilder()
-                    .SetBasePath(executionContext.FunctionAppDirectory)
-                    .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
-                    .AddEnvironmentVariables()
-                    .Build();
+                // init log writer
+                Log = log ?? throw new ArgumentNullException(nameof(log));
+
+                // init properties
+                Properties = new RequestProperties();
             }
 
-            public readonly IConfiguration Configuration;
+            public string SignCertificateUrl => Environment.GetEnvironmentVariable("SignCertificateUrl");
 
-            public string SignCertificateUrl => Configuration["SignCertificateUrl"];
-
-            public string TokenLifetime => Configuration["TokenLifetime"];
+            public string TokenLifetime => Environment.GetEnvironmentVariable("TokenLifetime");
 
             public RequestProperties Properties { get; set; }
+
+            public ExecutionContext ExecutionContext { get; }
+
+            public TraceWriter Log { get; }
 
             public void Validate()
             {

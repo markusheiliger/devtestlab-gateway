@@ -6,16 +6,23 @@
             "type": "string",
             "minLength": 1
         },
-        "signCertificateUrl":{
+        "gatewayIp": {
+            "type": "string",
+            "minLength": 1
+        },
+        "signCertificateUrl": {
             "type": "string",
             "defaultValue": ""
         }
     },
     "variables": {
+        "githubRepoUrl": "https://github.com/markusheiliger/devtestlab-gateway.git",
+        "githubBranch": "master",
         "storageName": "[replace(parameters('resourcePrefix'), '-', '')]",
         "hostingplanName": "[concat(parameters('resourcePrefix'), '-hp')]",
         "functionName": "[concat(parameters('resourcePrefix'), '-fu')]",
-        "functionIdentity": "[concat(resourceId('Microsoft.Web/sites', variables('functionName')), '/providers/Microsoft.ManagedIdentity/Identities/default')]"    },
+        "functionIdentity": "[concat(resourceId('Microsoft.Web/sites', variables('functionName')), '/providers/Microsoft.ManagedIdentity/Identities/default')]"
+    },
     "resources": [
         {
             "name": "[variables('storageName')]",
@@ -85,7 +92,22 @@
                         }
                     ]
                 }
-            }
+            },
+            "resources": [
+                {
+                    "apiVersion": "2015-08-01",
+                    "name": "web",
+                    "type": "sourcecontrols",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/Sites', variables('functionName'))]"
+                    ],
+                    "properties": {
+                        "RepoUrl": "[variables('githubRepoUrl')]",
+                        "branch": "[variables('githubBranch')]",
+                        "IsManualIntegration": true
+                    }
+                }
+            ]
         }
     ],
     "outputs": {
@@ -93,13 +115,13 @@
             "type": "string",
             "value": "[reference(variables('functionIdentity'), '2015-08-31-PREVIEW').tenantId]"
         },
-        "objectId": {
+        "principalId": {
             "type": "string",
             "value": "[reference(variables('functionIdentity'), '2015-08-31-PREVIEW').principalId]"
         },
-        "functionHostname" : {
+        "functionHostname": {
             "type": "string",
             "value": "[reference(resourceId('Microsoft.Web/sites', variables('functionName')), '2015-08-01').defaultHostName]"
         }
     }
-  }
+}

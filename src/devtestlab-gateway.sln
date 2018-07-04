@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27703.2035
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TokenFactory", "TokenFactory\TokenFactory.csproj", "{D3C5DA0E-AFF5-4A17-BF39-DF39DE41F124}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RDGatewayAPI", "RDGatewayAPI\RDGatewayAPI.csproj", "{4948E6B2-71DD-4E41-9081-156AC4E48193}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,10 +11,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{D3C5DA0E-AFF5-4A17-BF39-DF39DE41F124}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D3C5DA0E-AFF5-4A17-BF39-DF39DE41F124}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D3C5DA0E-AFF5-4A17-BF39-DF39DE41F124}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D3C5DA0E-AFF5-4A17-BF39-DF39DE41F124}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4948E6B2-71DD-4E41-9081-156AC4E48193}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4948E6B2-71DD-4E41-9081-156AC4E48193}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4948E6B2-71DD-4E41-9081-156AC4E48193}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4948E6B2-71DD-4E41-9081-156AC4E48193}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

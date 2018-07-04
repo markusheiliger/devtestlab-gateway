@@ -12,12 +12,12 @@ param (
     [string] $VirtualMachineResourceId,
 
     [Parameter(Mandatory = $false)]
-    [string] $CreateTokenServiceApiKey
+    [string] $CreateTokenServiceCode
 )
 
 $tokenServiceBaseUrl = "https://$GatewayHostname/api/"
 
-if (-not $CreateTokenServiceApiKey) {
+if (-not $CreateTokenServiceCode) {
 
     # no token service api key available - assume we are in dev mode
     $tokenServiceBaseUrl = "http://localhost:7071/api/"
@@ -25,24 +25,33 @@ if (-not $CreateTokenServiceApiKey) {
 
 $tokenServiceFullUrl = $tokenServiceBaseUrl + $VirtualMachineResourceId.Trim("/") + "/users/" + (Get-AzureRmADUser -UserPrincipalName ((Get-AzureRmContext).Account.Id)).Id
 
+if ($CreateTokenServiceCode) {
+
+    # add authentication token for create token service
+    $tokenServiceFullUrl += "?code=$CreateTokenServiceCode"
+}
+
 Write-Host "Connecting token service: $tokenServiceFullUrl"
 
 $token = (Invoke-WebRequest -Uri $tokenServiceFullUrl -UseBasicParsing).Content
-$virtualMachineHost = (($token -split "&")[0] -split "=")[1]
-$virtualMachinePort = (($token -split "&")[1] -split "=")[1]
 
-$rdpFilePath = Join-Path $PSScriptRoot "$virtualMachineHost.rdp"
+if ($token) {
+    
+    $virtualMachineHost = (($token -split "&")[0] -split "=")[1]
+    $virtualMachinePort = (($token -split "&")[1] -split "=")[1]
 
-@(
-    "full address:s:${virtualMachineHost}:${virtualMachinePort}",
-    "prompt for credentials:i:1",
-    "gatewayhostname:s:$GatewayHostname",
-    "gatewayaccesstoken:s:$token",
-    "gatewayusagemethod:i:1",
-    "gatewaycredentialssource:i:5",
-    "gatewayprofileusagemethod:i:1"
+    $rdpFilePath = Join-Path $PSScriptRoot "$virtualMachineHost.rdp"
 
-) | Out-File -FilePath $rdpFilePath -Force
+    @(
+        "full address:s:${virtualMachineHost}:${virtualMachinePort}",
+        "prompt for credentials:i:1",
+        "gatewayhostname:s:$GatewayHostname",
+        "gatewayaccesstoken:s:$token",
+        "gatewayusagemethod:i:1",
+        "gatewaycredentialssource:i:5",
+        "gatewayprofileusagemethod:i:1"
 
-Start-Process "mstsc.exe" -ArgumentList @( $rdpFilePath )
+    ) | Out-File -FilePath $rdpFilePath -Force
 
+    Start-Process "mstsc.exe" -ArgumentList @( $rdpFilePath )
+}
