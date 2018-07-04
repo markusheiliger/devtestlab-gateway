@@ -81,6 +81,7 @@
     "variables": {
         "resourcePrefix": "[take(concat('rdgw-', uniqueString(resourceGroup().id)),10)]",
         "asName": "[concat(variables('resourcePrefix'), '-as')]",
+        "aiName": "[concat(variables('resourcePrefix'), '-ai')]",
         "kvName": "[concat(variables('resourcePrefix'), '-kv')]",
         "kvSecretSSL": "SSLCertificate",
         "kvSecretSign": "SignCertificate",
@@ -96,6 +97,15 @@
         "deployFunctionUpdate": "[concat(deployment().name, '-Function-Update')]"
     },
     "resources": [
+        {
+            "apiVersion": "2015-05-01",
+            "type": "microsoft.insights/components",
+            "name": "[variables('aiName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "ApplicationId": "[variables('aiName')]"
+            }
+        },
         {
             "apiVersion": "2015-06-15",
             "type": "Microsoft.Network/publicIPAddresses",
@@ -113,7 +123,8 @@
             "type": "Microsoft.Resources/deployments",
             "apiVersion": "2015-01-01",
             "dependsOn": [
-                "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]",
+                "[resourceId('microsoft.insights/components', variables('aiName'))]"
             ],
             "properties": {
                 "mode": "Incremental",
@@ -127,6 +138,9 @@
                     },
                     "gatewayIp": {
                         "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))).ipAddress]"
+                    },
+                    "instrumentationKey": {
+                        "value": "[reference(resourceId('microsoft.insights/components', variables('aiName'))).InstrumentationKey]"
                     }
                 }
             }
@@ -138,7 +152,8 @@
             "dependsOn": [
                 "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSign'))]",
                 "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSSL'))]",
-                "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]",
+                "[resourceId('microsoft.insights/components', variables('aiName'))]"
             ],
             "properties": {
                 "mode": "Incremental",
@@ -152,6 +167,9 @@
                     },
                     "gatewayIp": {
                         "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))).ipAddress]"
+                    },
+                    "instrumentationKey": {
+                        "value": "[reference(resourceId('microsoft.insights/components', variables('aiName'))).InstrumentationKey]"
                     },
                     "signCertificateUrl": {
                         "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSign'))).secretUriWithVersion]"

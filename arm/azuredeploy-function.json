@@ -10,6 +10,10 @@
             "type": "string",
             "minLength": 1
         },
+        "instrumentationKey": {
+            "type": "string",
+            "minLength": 1
+        },
         "signCertificateUrl": {
             "type": "string",
             "defaultValue": ""
@@ -73,6 +77,10 @@
                         {
                             "name": "AzureWebJobsStorage",
                             "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')),'2015-05-01-preview').key1)]"
+                        },
+                        {
+                            "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                            "value": "[parameters('instrumentationKey')]"
                         },
                         {
                             "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
