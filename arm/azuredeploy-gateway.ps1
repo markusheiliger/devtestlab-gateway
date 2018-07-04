@@ -104,10 +104,14 @@ function Install-ApplicationRequestRouting {
         $appcmd = Join-Path $env:windir "System32\inetsrv\appcmd.exe"
         $ruleName = "TokenFactoryAPI"
         
-        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/+`"[name='$ruleName',patternSyntax='Wildcard',stopProcessing='True']`"", "/commit:apphost") -NoNewWindow -Wait
-        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".match.url:`"/api/*`"", "/commit:apphost") -NoNewWindow -Wait
-        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".action.type:`"Rewrite`"", "/commit:apphost") -NoNewWindow -Wait        
-        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".action.url:`"https://$Hostname/{R:0}`"", "/commit:apphost") -NoNewWindow -Wait        
+        # enable ARR proxy
+        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/proxy", "/enabled:`"True`"", "/commit:apphost" ) -NoNewWindow -Wait
+
+        # create API rewrite rule
+        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/+`"[name='$ruleName',patternSyntax='Wildcard',stopProcessing='True']`"", "/commit:apphost" ) -NoNewWindow -Wait
+        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".match.url:`"api/*`"", "/commit:apphost" ) -NoNewWindow -Wait
+        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".action.type:`"Rewrite`"", "/commit:apphost" ) -NoNewWindow -Wait        
+        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".action.url:`"https://$Hostname/{R:0}`"", "/commit:apphost" ) -NoNewWindow -Wait        
     }
 }
 

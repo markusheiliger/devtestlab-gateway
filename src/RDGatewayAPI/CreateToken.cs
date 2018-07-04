@@ -211,9 +211,9 @@ namespace RDGatewayAPI
                 var certificate = await GetCertificateAsync(requestContext);
 
                 // get the signed authentication token
-                var token = await GetTokenAsync(requestContext, certificate);
+                var response = new { token = await GetTokenAsync(requestContext, certificate) };                
 
-                return req.CreateResponse(HttpStatusCode.OK, token);
+                return req.CreateResponse(HttpStatusCode.OK, JsonConvert.SerializeObject(response), "application/json");
             }
             catch (Exception exc)
             {
