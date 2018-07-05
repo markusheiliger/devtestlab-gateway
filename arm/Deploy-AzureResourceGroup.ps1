@@ -138,7 +138,5 @@ else {
                                     
     if ($ErrorMessages) {
         Write-Output '', 'Template deployment returned the following errors:', @(@($ErrorMessages) | ForEach-Object { $_.Exception.Message.TrimEnd("`r`n") })
-    } elseif ($deploymentResult.Outputs.containsKey('principalId')) {
-        New-AzureRmRoleAssignment -ObjectId $deploymentResult.Outputs.principalId.value -RoleDefinitionName Reader -Scope "/subscriptions/$((Get-AzureRmContext).Subscription.Id)" -ErrorAction SilentlyContinue | Out-Null
-    }
+    } 
 }
