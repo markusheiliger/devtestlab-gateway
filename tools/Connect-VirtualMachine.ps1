@@ -33,12 +33,12 @@ if ($CreateTokenServiceCode) {
 
 Write-Host "Connecting token service: $tokenServiceFullUrl"
 
-$token = (Invoke-WebRequest -Uri $tokenServiceFullUrl -UseBasicParsing).Content
+$response = Invoke-RestMethod -Uri $tokenServiceFullUrl
 
-if ($token) {
-    
-    $virtualMachineHost = (($token -split "&")[0] -split "=")[1]
-    $virtualMachinePort = (($token -split "&")[1] -split "=")[1]
+if ($response) {
+
+    $virtualMachineHost = (($response.token -split "&")[0] -split "=")[1]
+    $virtualMachinePort = (($response.token -split "&")[1] -split "=")[1]
 
     $rdpFilePath = Join-Path $PSScriptRoot "$virtualMachineHost.rdp"
 
@@ -46,7 +46,7 @@ if ($token) {
         "full address:s:${virtualMachineHost}:${virtualMachinePort}",
         "prompt for credentials:i:1",
         "gatewayhostname:s:$GatewayHostname",
-        "gatewayaccesstoken:s:$token",
+        "gatewayaccesstoken:s:$($response.token)",
         "gatewayusagemethod:i:1",
         "gatewaycredentialssource:i:5",
         "gatewayprofileusagemethod:i:1"
