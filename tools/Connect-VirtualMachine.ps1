@@ -1,5 +1,5 @@
 # SAMPLE
-# .\Connect-VirtualMachine -GatewayHostname rdgw.dash-two.de -VirtualMachineResourceId /subscriptions/d3fed5a4-2ebb-4ad4-93c6-51afcbe01350/resourceGroups/Lab4Bosch/providers/Microsoft.DevTestLab/labs/lab4bosch/virtualmachines/markushe-devbox
+# .\Connect-VirtualMachine -GatewayHostname rdgw.dash-two.de -MachineHostname markushe-devbox.westeurope.cloudapp.azure.com -MachinePort 3389 
 
 param (
 
@@ -9,41 +9,44 @@ param (
 
     # The lab's target machine resource ID
     [Parameter(Mandatory = $true)]
-    [string] $VirtualMachineResourceId,
+    [string] $MachineHostname,
+
+    # Parameter help description
+    [Parameter(Mandatory = $false)]
+    [int] $MachinePort = 3389,
 
     [Parameter(Mandatory = $false)]
-    [string] $CreateTokenServiceCode
+    [string] $APICode
 )
 
-$tokenServiceBaseUrl = "https://$GatewayHostname/api/"
+$tokenServiceBaseUrl = "https://$GatewayHostname/api"
 
-if (-not $CreateTokenServiceCode) {
+if (-not $APICode) {
 
     # no token service api key available - assume we are in dev mode
-    $tokenServiceBaseUrl = "http://localhost:7071/api/"
+    $tokenServiceBaseUrl = "http://localhost:7071/api"
 }
 
-$tokenServiceFullUrl = $tokenServiceBaseUrl + $VirtualMachineResourceId.Trim("/") + "/users/" + (Get-AzureRmADUser -UserPrincipalName ((Get-AzureRmContext).Account.Id)).Id
+$tokenServiceFullUrl = "$tokenServiceBaseUrl/host/$MachineHostname/port/$MachinePort" 
 
-if ($CreateTokenServiceCode) {
-
-    # add authentication token for create token service
-    $tokenServiceFullUrl += "?code=$CreateTokenServiceCode"
+$headers = @{
+    "x-ms-client-object-id" = (Get-AzureRmADUser -UserPrincipalName ((Get-AzureRmContext).Account.Id)).Id
+    "x-functions-key" = $APICode
 }
 
 Write-Host "Connecting token service: $tokenServiceFullUrl"
 
-$response = Invoke-RestMethod -Uri $tokenServiceFullUrl
+$response = Invoke-RestMethod -Uri $tokenServiceFullUrl -Headers $headers
 
 if ($response) {
 
-    $virtualMachineHost = (($response.token -split "&")[0] -split "=")[1]
-    $virtualMachinePort = (($response.token -split "&")[1] -split "=")[1]
+    $tokenHost = (($response.token -split "&")[0] -split "=")[1]
+    $tokenPort = (($response.token -split "&")[1] -split "=")[1]
 
-    $rdpFilePath = Join-Path $PSScriptRoot "$virtualMachineHost.rdp"
+    $rdpFilePath = Join-Path $PSScriptRoot "$tokenHost.rdp"
 
     @(
-        "full address:s:${virtualMachineHost}:${virtualMachinePort}",
+        "full address:s:${tokenHost}:${tokenPort}",
         "prompt for credentials:i:1",
         "gatewayhostname:s:$GatewayHostname",
         "gatewayaccesstoken:s:$($response.token)",
