@@ -69,13 +69,29 @@ namespace RDGatewayAPI
 
             Int64 GetPosixLifetime()
             {
-                // default lifetime is 1 minute
-                var endOfLife = DateTime.UtcNow.AddMinutes(1);
+                DateTime endOfLife;
 
-                if (TimeSpan.TryParse(Environment.GetEnvironmentVariable("TokenLifetime"), out TimeSpan lifetime))
+                var tokenLifetime = Environment.GetEnvironmentVariable("TokenLifetime");
+
+                if (string.IsNullOrEmpty(tokenLifetime))
                 {
-                    // apply lifetime from configuration
-                    endOfLife = DateTime.UtcNow.Add(lifetime);
+                    // default lifetime is 1 minute
+                    endOfLife = DateTime.UtcNow.AddMinutes(1);
+                }
+                else
+                {
+                    try
+                    {
+                        // parse token lifetime
+                        var duration = TimeSpan.Parse(tokenLifetime);
+
+                        // apply lifetime from configuration
+                        endOfLife = DateTime.UtcNow.Add(duration);
+                    }
+                    catch (Exception exc)
+                    {
+                        throw new ConfigurationErrorsException($"Failed to parse token lifetime '{tokenLifetime}' from configuration");
+                    }
                 }
 
                 // return lifetime in posix format
