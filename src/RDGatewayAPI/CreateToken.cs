@@ -17,6 +17,7 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Host;
 using Newtonsoft.Json;
+using RDGatewayAPI.Model;
 
 namespace RDGatewayAPI
 {
@@ -42,7 +43,7 @@ namespace RDGatewayAPI
                 var keyVaultClient = new KeyVaultClient(new KeyVaultClient.AuthenticationCallback(AzureManagementApiTokenProvider.KeyVaultTokenCallback));
 
                 // get the base64 encoded secret and decode
-                var signCertificateSecret = await keyVaultClient.GetSecretAsync(context.SignCertificateUrl);
+                var signCertificateSecret = await keyVaultClient.GetSecretAsync(Configuration.SignCertificateUrl);
                 var signCertificateBuffer = Convert.FromBase64String(signCertificateSecret.Value);
 
                 context.Log.Info($"Downloaded certificate from KeyVault ({signCertificateBuffer.Length} bytes)");
@@ -57,27 +58,22 @@ namespace RDGatewayAPI
             {
                 context.Log.Error(exc.Message, exc);
 
-                throw new Exception($"Failed to load certificate from KeyVault by URL '{context.SignCertificateUrl}'", exc);
+                throw new Exception($"Failed to load certificate from KeyVault by URL '{Configuration.SignCertificateUrl}'", exc);
             }
         }
 
-        private static async Task<DnsEndPoint> GetRDPEndPoint(RequestContext requestContext, string computeVmResourceId)
+        private static async Task<DnsEndPoint> GetRDPEndPointAsync(RequestContext requestContext)
         {
             if (requestContext == null)
             {
                 throw new ArgumentNullException(nameof(requestContext));
             }
-
-            if (computeVmResourceId == null)
-            {
-                throw new ArgumentNullException(nameof(computeVmResourceId));
-            }
-
+            
             // request token for Azure communication
             var azureToken = await AzureManagementApiTokenProvider.GetAccessTokenAsync(AZURE_MANAGEMENT_API);
 
             dynamic computeVmResource = await AZURE_MANAGEMENT_API
-                .AppendPathSegment(computeVmResourceId)
+                .AppendPathSegment(requestContext.LabVMResourceId.ToResourceId())
                 .SetQueryParam("api-version", "2016-05-15")
                 .WithOAuthBearerToken(azureToken)
                 .GetJsonAsync();
@@ -121,7 +117,7 @@ namespace RDGatewayAPI
                 }
             }
 
-            throw new Exception($"Could not resolve RDP end point for compute VM '{computeVmResourceId}'");
+            throw new Exception($"Could not resolve RDP end point for compute VM '{requestContext.LabVMResourceId.ToResourceId()}'");
         }
 
         private static async Task<string> GetTokenAsync(RequestContext requestContext, X509Certificate2 certificate)
@@ -136,20 +132,19 @@ namespace RDGatewayAPI
                 throw new ArgumentNullException(nameof(certificate));
             }
 
-
             // request token for Azure communication
             var azureToken = await AzureManagementApiTokenProvider.GetAccessTokenAsync(AZURE_MANAGEMENT_API);
 
             // fetch the lab VM resource to gather information needed for token creation
             dynamic labVmResource = await AZURE_MANAGEMENT_API
-                .AppendPathSegment($"subscriptions/{requestContext.Properties.SubscriptionId}/resourceGroups/{requestContext.Properties.ResourceGroupName}/providers/Microsoft.DevTestLab/labs/{requestContext.Properties.LabName}/virtualmachines/{requestContext.Properties.VirtualMachineName}")
+                .AppendPathSegment(requestContext.LabVMResourceId.ToString())
                 .SetQueryParam("api-version", "2016-05-15")
                 .WithOAuthBearerToken(azureToken)
                 .GetJsonAsync();
 
             // if the lab VM disallows public IP addresses we need to dig deeper to get the required information
             var rdpEndPoint = (DnsEndPoint)(labVmResource.properties.disallowPublicIpAddress
-                                ? GetRDPEndPoint(requestContext, labVmResource.properties.computeId)
+                                ? await GetRDPEndPointAsync(requestContext)
                                 : new DnsEndPoint(labVmResource.properties.fqdn, 3389));
 
             // create the machine token and sign the data
@@ -162,14 +157,7 @@ namespace RDGatewayAPI
 
             Int64 GetPosixLifetime()
             {
-                // default lifetime is 1 minute
-                var endOfLife = DateTime.UtcNow.AddMinutes(1);
-
-                if (TimeSpan.TryParse(requestContext.TokenLifetime, out TimeSpan lifetime))
-                {
-                    // apply lifetime from configuration
-                    endOfLife = DateTime.UtcNow.Add(lifetime);
-                }
+                var endOfLife = DateTime.UtcNow.AddMinutes(Configuration.TokenLifetime);
 
                 return (Int64)endOfLife.Subtract(PosixBaseTime).TotalSeconds;
             }
@@ -184,23 +172,24 @@ namespace RDGatewayAPI
 
             try
             {
-                requestContext = new RequestContext(executionContext, log)
+                var labUserResourceId = new LabUserResourceId
                 {
-                    Properties = new RequestProperties()
-                    {
-                        SubscriptionId = subscriptionId,
-                        UserId = userId,
-                        ResourceGroupName = resourceGroupName,
-                        LabName = labName,
-                        VirtualMachineName = virtualMachineName
-                    }
+                    ObjectId = Guid.Parse(userId)
                 };
 
-                requestContext.Validate();
+                var labVMResourceId = new LabVMResourceId
+                {
+                    SubscriptionId = Guid.Parse(subscriptionId),
+                    ResourceGroupName = resourceGroupName,
+                    LabName = labName,
+                    VirtualMachineName = virtualMachineName
+                };
+
+                requestContext = (new RequestContext(executionContext, log, labVMResourceId, labUserResourceId)).Validate();
             }
             catch (Exception exc)
             {
-                log.Error($"Failed to validate request {executionContext.InvocationId}: {exc.StackTrace.ToString()}", exc);
+                log.Error($"Failed to validate request {executionContext.InvocationId}", exc);
 
                 return req.CreateResponse(HttpStatusCode.BadRequest);
             }
@@ -217,7 +206,7 @@ namespace RDGatewayAPI
             }
             catch (Exception exc)
             {
-                log.Error($"Failed to process request {executionContext.InvocationId}: {exc.StackTrace.ToString()}", exc);
+                log.Error($"Failed to process request {executionContext.InvocationId}", exc);
 
                 return req.CreateResponse(HttpStatusCode.InternalServerError);
             }
@@ -225,7 +214,7 @@ namespace RDGatewayAPI
 
         private class RequestContext
         {
-            public RequestContext(ExecutionContext executionContext, TraceWriter log)
+            public RequestContext(ExecutionContext executionContext, TraceWriter log, LabVMResourceId labVMResourceId, LabUserResourceId labUserResourceId)
             {
                 // init execution context
                 ExecutionContext = executionContext ?? throw new ArgumentNullException(nameof(executionContext));
@@ -233,37 +222,26 @@ namespace RDGatewayAPI
                 // init log writer
                 Log = log ?? throw new ArgumentNullException(nameof(log));
 
-                // init properties
-                Properties = new RequestProperties();
+                LabVMResourceId = labVMResourceId ?? throw new ArgumentNullException(nameof(labVMResourceId));
+
+                LabUserResourceId = labUserResourceId ?? throw new ArgumentNullException(nameof(labUserResourceId));
             }
-
-            public string SignCertificateUrl => Environment.GetEnvironmentVariable("SignCertificateUrl");
-
-            public string TokenLifetime => Environment.GetEnvironmentVariable("TokenLifetime");
-
-            public RequestProperties Properties { get; set; }
 
             public ExecutionContext ExecutionContext { get; }
 
             public TraceWriter Log { get; }
 
-            public void Validate()
+            public LabVMResourceId LabVMResourceId { get; }
+
+            public LabUserResourceId LabUserResourceId { get; }
+
+            public RequestContext Validate()
             {
                 // add validation logic here if needed
+
+                return this;
             }
         }
 
-        private class RequestProperties
-        {
-            public string SubscriptionId { get; set; }
-
-            public string UserId { get; set; }
-
-            public string ResourceGroupName { get; set; }
-
-            public string LabName { get; set; }
-
-            public string VirtualMachineName { get; set; }
-        }
     }
 }
