@@ -34,7 +34,8 @@ $headers = @{
     "x-functions-key" = $APICode
 }
 
-Write-Host "Connecting token service: $tokenServiceFullUrl"
+Write-Host "Connecting token service: $tokenServiceFullUrl "
+$headers | FT
 
 $response = Invoke-RestMethod -Uri $tokenServiceFullUrl -Headers $headers
 
