@@ -100,11 +100,25 @@ if ($Reset -and (Get-AzureRmResourceGroup -Name $ResourceGroupName -Location $Re
 
     if ($Force) { Get-AzureRmResourceGroupDeployment -ResourceGroupName $ResourceGroupName | ? { $_.ProvisioningState -eq "Running" } | Stop-AzureRmResourceGroupDeployment | Out-Null }
 
-    New-AzureRmResourceGroupDeployment -Name ('azurereset-' + ((Get-Date).ToUniversalTime()).ToString('MMdd-HHmm')) `
-                                       -ResourceGroupName $ResourceGroupName `
-                                       -TemplateUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.json" `
-                                       -TemplateParameterUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.parameters.json" `
-                                       -Force -Verbose -Mode Complete
+    $resetDeploymentName = 'azurereset-' + ((Get-Date).ToUniversalTime()).ToString('MMdd-HHmm')
+    $resetTemplateFile = Join-Path $PSScriptRoot "azurereset.json"
+
+    if (Test-Path -Path $resetTemplateFile -PathType Leaf ) {
+
+        New-AzureRmResourceGroupDeployment -Name $resetDeploymentName `
+        -ResourceGroupName $ResourceGroupName `
+        -TemplateFile $resetTemplateFile
+        -TemplateParameterUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.parameters.json" `
+        -Force -Verbose -Mode Complete
+
+    } else {
+
+        New-AzureRmResourceGroupDeployment -Name $resetDeploymentName `
+            -ResourceGroupName $ResourceGroupName `
+            -TemplateUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.json" `
+            -TemplateParameterUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.parameters.json" `
+            -Force -Verbose -Mode Complete
+    }
 }
 
 # Create or update the resource group using the specified template file and template parameters file

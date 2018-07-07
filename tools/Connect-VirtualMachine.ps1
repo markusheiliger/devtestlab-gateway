@@ -1,11 +1,11 @@
-# SAMPLE
-# .\Connect-VirtualMachine -GatewayHostname rdgw.dash-two.de -MachineHostname markushe-devbox.westeurope.cloudapp.azure.com -MachinePort 3389 
+# SAMPLES
+# =>> for development
+# .\Connect-VirtualMachine -MachineHostname markushe-devbox.westeurope.cloudapp.azure.com
+# =>> for testing
+# .\Connect-VirtualMachine -MachineHostname markushe-devbox.westeurope.cloudapp.azure.com -MachinePort 3389 -GatewayHostname rdgw.dash-two.de -GatewayCode
+# .\Connect-VirtualMachine -MachineHostname markushe-devbox.westeurope.cloudapp.azure.com -MachinePort 3389 -GatewayHostname rdpgw.vsdth.visualstudio.com -GatewayCode
 
 param (
-
-    # The RD gateway hostname
-    [Parameter(Mandatory = $true)]
-    [string] $GatewayHostname,
 
     # The lab's target machine resource ID
     [Parameter(Mandatory = $true)]
@@ -15,15 +15,19 @@ param (
     [Parameter(Mandatory = $false)]
     [int] $MachinePort = 3389,
 
+    # The RD gateway hostname
     [Parameter(Mandatory = $false)]
-    [string] $APICode
+    [string] $GatewayHostname,
+
+    [Parameter(Mandatory = $false)]
+    [string] $GatewayCode
 )
 
 $tokenServiceBaseUrl = "https://$GatewayHostname/api"
 
-if (-not $APICode) {
+if (-not $GatewayHostname -or -not $GatewayCode) {
 
-    # no token service api key available - assume we are in dev mode
+    # fall back to dev mode
     $tokenServiceBaseUrl = "http://localhost:7071/api"
 }
 
@@ -31,7 +35,7 @@ $tokenServiceFullUrl = "$tokenServiceBaseUrl/host/$MachineHostname/port/$Machine
 
 $headers = @{
     "x-ms-client-object-id" = (Get-AzureRmADUser -UserPrincipalName ((Get-AzureRmContext).Account.Id)).Id
-    "x-functions-key" = $APICode
+    "x-functions-key" = $GatewayCode
 }
 
 Write-Host "Connecting token service: $tokenServiceFullUrl "
@@ -39,7 +43,7 @@ $headers | FT
 
 $response = Invoke-RestMethod -Uri $tokenServiceFullUrl -Headers $headers
 
-if ($response) {
+if ($response -and $response.token) {
 
     $tokenHost = (($response.token -split "&")[0] -split "=")[1]
     $tokenPort = (($response.token -split "&")[1] -split "=")[1]
@@ -58,4 +62,8 @@ if ($response) {
     ) | Out-File -FilePath $rdpFilePath -Force
 
     Start-Process "mstsc.exe" -ArgumentList @( $rdpFilePath )
+    
+} else {
+
+    Write-Error "Failed to get token from gateway API."
 }
