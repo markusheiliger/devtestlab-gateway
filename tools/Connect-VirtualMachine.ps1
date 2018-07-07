@@ -53,6 +53,7 @@ if ($response -and $response.token) {
     @(
         "full address:s:${tokenHost}:${tokenPort}",
         "prompt for credentials:i:1",
+        "bandwidthautodetect:i:0"
         "gatewayhostname:s:$GatewayHostname",
         "gatewayaccesstoken:s:$($response.token)",
         "gatewayusagemethod:i:1",
