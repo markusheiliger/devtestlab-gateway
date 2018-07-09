@@ -9,16 +9,15 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
-using Flurl;
-using Flurl.Http;
 using Microsoft.Azure.KeyVault;
 using Microsoft.Azure.Services.AppAuthentication;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Host;
 using Newtonsoft.Json;
+using RDGatewayAPI.Data;
 
-namespace RDGatewayAPI
+namespace RDGatewayAPI.Functions
 {
     public static class CreateToken
     {
@@ -42,7 +41,7 @@ namespace RDGatewayAPI
                 var keyVaultClient = new KeyVaultClient(new KeyVaultClient.AuthenticationCallback(AzureManagementApiTokenProvider.KeyVaultTokenCallback));
 
                 // get the base64 encoded secret and decode
-                var signCertificateSecret = await keyVaultClient.GetSecretAsync(signCertificateUrl);
+                var signCertificateSecret = await keyVaultClient.GetSecretAsync(signCertificateUrl).ConfigureAwait(false);
                 var signCertificateBuffer = Convert.FromBase64String(signCertificateSecret.Value);
 
                 // unwrap the json data envelope
@@ -90,7 +89,7 @@ namespace RDGatewayAPI
                     }
                     catch (Exception exc)
                     {
-                        throw new ConfigurationErrorsException($"Failed to parse token lifetime '{tokenLifetime}' from configuration");
+                        throw new ConfigurationErrorsException($"Failed to parse token lifetime '{tokenLifetime}' from configuration", exc);
                     }
                 }
 
@@ -100,24 +99,50 @@ namespace RDGatewayAPI
         }
 
         [FunctionName("CreateToken")]
-        public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "host/{host}/port/{port}")]HttpRequestMessage req, TraceWriter log, ExecutionContext executionContext, string host, int port)
+        public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "host/{host}/port/{port}")]HttpRequestMessage req,
+                                                          [Queue("track-users")]  ICollector<string> trackUserQueue,
+                                                          TraceWriter log, ExecutionContext executionContext,
+                                                          string host, int port)
         {
-            var user = req.GetHeaderValue(USER_OBJECTID_HEADER);
+            var user = req.Headers.TryGetValues(USER_OBJECTID_HEADER, out IEnumerable<string> values) ? values.FirstOrDefault() : default(string);
 
-            if (string.IsNullOrEmpty(user))
+            if (string.IsNullOrEmpty(user) || !Guid.TryParse(user, out Guid userId))
             {
-                log.Error("BadRequest - missing request header 'USER_OBJECTID_HEADER'");
+                log.Error($"BadRequest - missing or invalid request header '{USER_OBJECTID_HEADER}'");
 
                 return req.CreateResponse(HttpStatusCode.BadRequest);
+            }
+            else
+            {
+                var userEntity = new UserEntity(req.GetCorrelationId())
+                {
+                    UserId = userId,
+                    Host = host,
+                    Port = port
+                };
+
+                trackUserQueue.Add(userEntity.ToJson());
+
+                for (int i = 0; i < 1000; i++)
+                {
+                    userEntity = new UserEntity(Guid.NewGuid())
+                    {
+                        UserId = userId,
+                        Host = host,
+                        Port = port
+                    };
+
+                    trackUserQueue.Add(userEntity.ToJson());
+                }
             }
 
             try
             {
                 // get the signing certificate
-                var certificate = await GetCertificateAsync();
+                var certificate = await GetCertificateAsync().ConfigureAwait(false);
 
                 // get the signed authentication token
-                var response = new { token = GetToken(certificate, host, port) };                
+                var response = new { token = GetToken(certificate, host, port) };
 
                 return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
             }
