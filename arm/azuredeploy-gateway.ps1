@@ -107,11 +107,17 @@ function Install-ApplicationRequestRouting {
         # enable ARR proxy
         Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/proxy", "/enabled:`"True`"", "/commit:apphost" ) -NoNewWindow -Wait
 
+        # set allowed server variables
+        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/allowedServerVariables", "/+`"[name='HTTP_X_FORWARDED_HOST']`"", "/commit:apphost" ) -NoNewWindow -Wait
+
         # create API rewrite rule
         Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/+`"[name='$ruleName',patternSyntax='Wildcard',stopProcessing='True']`"", "/commit:apphost" ) -NoNewWindow -Wait
         Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".match.url:`"api/*`"", "/commit:apphost" ) -NoNewWindow -Wait
         Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".action.type:`"Rewrite`"", "/commit:apphost" ) -NoNewWindow -Wait        
         Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/`"[name='$ruleName']`".action.url:`"https://$Hostname/{R:0}`"", "/commit:apphost" ) -NoNewWindow -Wait        
+
+        # set custom header for backend
+        Start-Process $appcmd -ArgumentList @( "set", "config", "-section:system.webServer/rewrite/globalRules", "/+`"[name='$ruleName']`".serverVariables.`"[name='HTTP_X_FORWARDER_HOST', value='{HTTP_HOST}']`"", "/commit:apphost" ) -NoNewWindow -Wait        
     }
 }
 
