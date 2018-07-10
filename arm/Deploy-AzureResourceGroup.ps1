@@ -153,6 +153,31 @@ else {
                                        -ErrorVariable ErrorMessages | Tee-Object -Variable deploymentResult
                                     
     if ($ErrorMessages) {
+
         Write-Output '', 'Template deployment returned the following errors:', @(@($ErrorMessages) | ForEach-Object { $_.Exception.Message.TrimEnd("`r`n") })
-    } 
+    
+    } else {
+
+        if (-not (Get-Module AzureRm.Profile)) {
+            Import-Module AzureRm.Profile
+        }
+
+        $azureRmProfileModuleVersion = (Get-Module AzureRm.Profile).Version
+        if ($azureRmProfileModuleVersion.Major -ge 3) {
+            $azureRmProfile = [Microsoft.Azure.Commands.Common.Authentication.Abstractions.AzureRmProfileProvider]::Instance.Profile
+        } else {
+            $azureRmProfile = [Microsoft.WindowsAzure.Commands.Common.AzureRmProfileProvider]::Instance.Profile
+        }
+
+        $profileClient = New-Object Microsoft.Azure.Commands.ResourceManager.Common.RMProfileClient($azureRmProfile)
+        $token = $profileClient.AcquireAccessToken((Get-AzureRmContext).Subscription.TenantId) 
+
+        $functionName = $deploymentResult.Outputs.functionName.Value
+        $headers = @{"Authorization" = "Bearer $($token.AccessToken)"}
+
+        $masterKey = (Invoke-RestMethod -Uri "https://$functionName.scm.azurewebsites.net/api/functions/admin/masterkey" -Headers $headers) | select -ExpandProperty masterkey
+        $defaultKey = (Invoke-RestMethod -Uri "https://$functionName.azurewebsites.net/admin/HOST/KEYS?CODE=$masterKey" -Headers $headers).keys | ? { $_.name -eq "default" } | select -ExpandProperty value
+
+        Write-Output "API Key: $defaultKey"        
+    }
 }

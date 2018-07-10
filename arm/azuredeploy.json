@@ -411,6 +411,10 @@
             "type": "string",
             "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))).ipAddress]"
         },
+        "functionName":{
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', variables('deployFunctionInit'))).outputs.functionName.value]"
+        },
         "tenantId": {
             "type": "string",
             "value": "[reference(resourceId('Microsoft.Resources/deployments', variables('deployFunctionInit'))).outputs.tenantId.value]"

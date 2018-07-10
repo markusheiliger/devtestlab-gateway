@@ -127,6 +127,10 @@
             "type": "string",
             "value": "[reference(variables('functionIdentity'), '2015-08-31-PREVIEW').principalId]"
         },
+        "functionName":{
+            "type": "string",
+            "value": "[variables('functionName')]"
+        },
         "functionHostname": {
             "type": "string",
             "value": "[reference(resourceId('Microsoft.Web/sites', variables('functionName')), '2015-08-01').defaultHostName]"
