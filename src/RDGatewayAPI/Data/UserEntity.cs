@@ -1,5 +1,4 @@
-﻿using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Table;
+﻿using Microsoft.WindowsAzure.Storage.Table;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -16,24 +15,17 @@ namespace RDGatewayAPI.Data
             // default constructor used for deserialization
         }
 
-        public UserEntity(Guid correlationId)
+        public UserEntity(Guid rowKey)
         {
-            RowKey = correlationId.ToString();
-            PartitionKey = DateTime.UtcNow.Year.ToString();
+            RowKey = rowKey.ToString();
+            PartitionKey = DateTime.UtcNow.ToString("yyyy");
             ETag = "*";
         }
 
-        public Guid UserId { get; set; }
+        public Guid UserId => Guid.Parse(RowKey);
 
         public string UserPrincipalName { get; set; }
 
-        public string Host { get; set; }
-
-        public int Port { get; set; }
-
-        public string ToJson()
-        {
-            return JsonConvert.SerializeObject(this);
-        }
+        public string UserDisplayName { get; set; }
     }
 }

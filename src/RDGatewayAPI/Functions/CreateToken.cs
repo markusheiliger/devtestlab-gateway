@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Azure.KeyVault;
 using Microsoft.Azure.Services.AppAuthentication;
@@ -28,6 +29,7 @@ namespace RDGatewayAPI.Functions
 
         private static readonly AzureServiceTokenProvider AzureManagementApiTokenProvider = new AzureServiceTokenProvider();
         private static readonly DateTime PosixBaseTime = new DateTime(1970, 1, 1, 0, 0, 0, 0);
+        private static readonly Regex TokenParseExpression = new Regex("(?<key>Host|Port|ExpiresOn)=(?<value>.+?)(?=&)", RegexOptions.Compiled);
 
         private static async Task<X509Certificate2> GetCertificateAsync()
         {
@@ -98,9 +100,37 @@ namespace RDGatewayAPI.Functions
             }
         }
 
+        private static void TrackToken(ICollector<string> collector, Guid correlationId, string token)
+        {
+            var tokenEntity = new TokenEntity(correlationId);
+
+            foreach (Match match in TokenParseExpression.Matches(token))
+            {
+                var key = match.Groups["key"].Value;
+                var value = match.Groups["value"].Value;
+
+                switch (key)
+                {
+                    case "Host":
+                        tokenEntity.Host = value;
+                        break;
+
+                    case "Port":
+                        tokenEntity.Port = int.Parse(value);
+                        break;
+
+                    case "ExpiresOn":
+                        tokenEntity.ExpiresOn = int.Parse(value);
+                        break;
+                }
+            }
+
+            collector.Add(tokenEntity.ToJson());
+        }
+
         [FunctionName("CreateToken")]
         public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "host/{host}/port/{port}")]HttpRequestMessage req,
-                                                          [Queue("track-users")]  ICollector<string> trackUserQueue,
+                                                          [Queue("track-token")]  ICollector<string> trackTokenQueue,
                                                           TraceWriter log, ExecutionContext executionContext,
                                                           string host, int port)
         {
@@ -112,29 +142,6 @@ namespace RDGatewayAPI.Functions
 
                 return req.CreateResponse(HttpStatusCode.BadRequest);
             }
-            else
-            {
-                var userEntity = new UserEntity(req.GetCorrelationId())
-                {
-                    UserId = userId,
-                    Host = host,
-                    Port = port
-                };
-
-                trackUserQueue.Add(userEntity.ToJson());
-
-                for (int i = 0; i < 1000; i++)
-                {
-                    userEntity = new UserEntity(Guid.NewGuid())
-                    {
-                        UserId = userId,
-                        Host = host,
-                        Port = port
-                    };
-
-                    trackUserQueue.Add(userEntity.ToJson());
-                }
-            }
 
             try
             {
@@ -143,6 +150,8 @@ namespace RDGatewayAPI.Functions
 
                 // get the signed authentication token
                 var response = new { token = GetToken(certificate, host, port) };
+
+                TrackToken(trackTokenQueue, req.GetCorrelationId(), response.token);
 
                 return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
             }
