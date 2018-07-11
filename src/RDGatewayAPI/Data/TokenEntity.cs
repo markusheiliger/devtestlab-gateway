@@ -23,7 +23,7 @@ namespace RDGatewayAPI.Data
             ETag = "*";
         }
 
-        public Guid SessionId => Guid.Parse(RowKey);
+        public Guid SessionId { get { return Guid.Parse(RowKey); } }
 
         public Guid UserId { get; set; }
 
