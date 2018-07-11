@@ -178,7 +178,8 @@ else {
 
         $functionName = $deploymentResult.Outputs.functionName.Value
         $headers = @{"Authorization" = "Bearer $($token.AccessToken)"}
-
+        $retry = 0
+        
         while ($true) {
             try {
                 $masterKey = (Invoke-RestMethod -Uri "https://$functionName.scm.azurewebsites.net/api/functions/admin/masterkey" -Headers $headers) | select -ExpandProperty masterkey
