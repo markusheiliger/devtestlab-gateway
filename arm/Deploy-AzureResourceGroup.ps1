@@ -183,7 +183,8 @@ else {
         while ($true) {
             try {
                 $masterKey = (Invoke-RestMethod -Uri "https://$functionName.scm.azurewebsites.net/api/functions/admin/masterkey" -Headers $headers) | select -ExpandProperty masterkey
-                $defaultKey = (Invoke-RestMethod -Uri "https://$functionName.azurewebsites.net/admin/HOST/KEYS?CODE=$masterKey" -Headers $headers).keys | ? { $_.name -eq "default" } | select -ExpandProperty value
+                $hostKeys = (Invoke-RestMethod -Uri "https://$functionName.azurewebsites.net/admin/HOST/KEYS?CODE=$masterKey" -Headers $headers) | select -ExpandProperty keys
+                $defaultKey = $hostKeys | ? { $_.name -eq "default" } | select -First 1 -ExpandProperty value
 
                 Write-Output "API Key: $defaultKey"        
                 break
