@@ -179,7 +179,7 @@ else {
         $functionName = $deploymentResult.Outputs.functionName.Value
         $headers = @{"Authorization" = "Bearer $($token.AccessToken)"}
         $retry = 0
-        
+
         while ($true) {
             try {
                 $masterKey = (Invoke-RestMethod -Uri "https://$functionName.scm.azurewebsites.net/api/functions/admin/masterkey" -Headers $headers) | select -ExpandProperty masterkey
@@ -191,7 +191,7 @@ else {
             catch {
                 if ($retry++ -lt 10) {
                     Write-Warning ($_.Exception.Message + " (waiting for retry $retry)")
-                    Start-Sleep -Seconds 10
+                    Start-Sleep -Seconds 30
                 }
                 else {
                     throw
