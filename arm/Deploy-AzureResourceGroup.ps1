@@ -5,8 +5,8 @@
 #Requires -Module Azure.Storage
 
 Param(
-    [string] [Parameter(Mandatory=$true)] $ResourceGroupLocation,
-    [string] [Parameter(Mandatory=$true)] $ResourceGroupName,
+    [string] [Parameter(Mandatory = $true)] $ResourceGroupLocation,
+    [string] [Parameter(Mandatory = $true)] $ResourceGroupName,
     [switch] $UploadArtifacts,
     [string] $StorageAccountName,
     [string] $StorageContainerName = $ResourceGroupName.ToLowerInvariant() + '-stageartifacts-' + (Get-Date).Ticks,
@@ -20,8 +20,9 @@ Param(
 )
 
 try {
-    [Microsoft.Azure.Common.Authentication.AzureSession]::ClientFactory.AddUserAgent("VSAzureTools-$UI$($host.name)".replace(' ','_'), '3.0.0')
-} catch { }
+    [Microsoft.Azure.Common.Authentication.AzureSession]::ClientFactory.AddUserAgent("VSAzureTools-$UI$($host.name)".replace(' ', '_'), '3.0.0')
+}
+catch { }
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
@@ -66,7 +67,7 @@ if ($UploadArtifacts) {
         $StorageAccountName = 'stage' + ((Get-AzureRmContext).Subscription.Id).Replace('-', '').substring(0, 19)
     }
 
-    $StorageAccount = (Get-AzureRmStorageAccount | Where-Object{$_.StorageAccountName -eq $StorageAccountName})
+    $StorageAccount = (Get-AzureRmStorageAccount | Where-Object {$_.StorageAccountName -eq $StorageAccountName})
 
     # Create the storage account if it doesn't already exist
     if ($StorageAccount -eq $null) {
@@ -92,7 +93,7 @@ if ($UploadArtifacts) {
     # Generate a 4 hour SAS token for the artifacts location if one was not provided in the parameters file
     if ($OptionalParameters[$ArtifactsLocationSasTokenName] -eq $null) {
         $OptionalParameters[$ArtifactsLocationSasTokenName] = ConvertTo-SecureString -AsPlainText -Force `
-            (New-AzureStorageContainerSASToken -Container $StorageContainerName -Context $StorageAccount.Context -Permission r -ExpiryTime (Get-Date).AddHours(4))
+        (New-AzureStorageContainerSASToken -Container $StorageContainerName -Context $StorageAccount.Context -Permission r -ExpiryTime (Get-Date).AddHours(4))
     }
 }
 
@@ -106,12 +107,13 @@ if ($Reset -and (Get-AzureRmResourceGroup -Name $ResourceGroupName -Location $Re
     if (Test-Path -Path $resetTemplateFile -PathType Leaf ) {
 
         New-AzureRmResourceGroupDeployment -Name $resetDeploymentName `
-        -ResourceGroupName $ResourceGroupName `
-        -TemplateFile $resetTemplateFile
+            -ResourceGroupName $ResourceGroupName `
+            -TemplateFile $resetTemplateFile
         -TemplateParameterUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.parameters.json" `
-        -Force -Verbose -Mode Complete
+            -Force -Verbose -Mode Complete
 
-    } else {
+    }
+    else {
 
         New-AzureRmResourceGroupDeployment -Name $resetDeploymentName `
             -ResourceGroupName $ResourceGroupName `
@@ -128,9 +130,9 @@ New-AzureRmResourceGroup -Name $ResourceGroupName -Location $ResourceGroupLocati
 
 if ($ValidateOnly) {
     $ErrorMessages = Format-ValidationOutput (Test-AzureRmResourceGroupDeployment -ResourceGroupName $ResourceGroupName `
-                                                                                  -TemplateFile $TemplateFile `
-                                                                                  -TemplateParameterFile $TemplateParametersFile `
-                                                                                  @OptionalParameters)
+            -TemplateFile $TemplateFile `
+            -TemplateParameterFile $TemplateParametersFile `
+            @OptionalParameters)
     if ($ErrorMessages) {
         Write-Output '', 'Validation returned the following errors:', @($ErrorMessages), '', 'Template is invalid.'
     }
@@ -145,18 +147,19 @@ else {
     $deploymentResult = $null # captures the deployment result
 
     New-AzureRmResourceGroupDeployment -Name ((Get-ChildItem $TemplateFile).BaseName + '-' + ((Get-Date).ToUniversalTime()).ToString('MMdd-HHmm')) `
-                                       -ResourceGroupName $ResourceGroupName `
-                                       -TemplateFile $TemplateFile `
-                                       -TemplateParameterFile $TemplateParametersFile `
-                                       @OptionalParameters `
-                                       -Force -Verbose `
-                                       -ErrorVariable ErrorMessages | Tee-Object -Variable deploymentResult
+        -ResourceGroupName $ResourceGroupName `
+        -TemplateFile $TemplateFile `
+        -TemplateParameterFile $TemplateParametersFile `
+        @OptionalParameters `
+        -Force -Verbose `
+        -ErrorVariable ErrorMessages | Tee-Object -Variable deploymentResult
                                     
     if ($ErrorMessages) {
 
         Write-Output '', 'Template deployment returned the following errors:', @(@($ErrorMessages) | ForEach-Object { $_.Exception.Message.TrimEnd("`r`n") })
     
-    } else {
+    }
+    else {
 
         if (-not (Get-Module AzureRm.Profile)) {
             Import-Module AzureRm.Profile
@@ -165,7 +168,8 @@ else {
         $azureRmProfileModuleVersion = (Get-Module AzureRm.Profile).Version
         if ($azureRmProfileModuleVersion.Major -ge 3) {
             $azureRmProfile = [Microsoft.Azure.Commands.Common.Authentication.Abstractions.AzureRmProfileProvider]::Instance.Profile
-        } else {
+        }
+        else {
             $azureRmProfile = [Microsoft.WindowsAzure.Commands.Common.AzureRmProfileProvider]::Instance.Profile
         }
 
@@ -175,9 +179,23 @@ else {
         $functionName = $deploymentResult.Outputs.functionName.Value
         $headers = @{"Authorization" = "Bearer $($token.AccessToken)"}
 
-        $masterKey = (Invoke-RestMethod -Uri "https://$functionName.scm.azurewebsites.net/api/functions/admin/masterkey" -Headers $headers) | select -ExpandProperty masterkey
-        $defaultKey = (Invoke-RestMethod -Uri "https://$functionName.azurewebsites.net/admin/HOST/KEYS?CODE=$masterKey" -Headers $headers).keys | ? { $_.name -eq "default" } | select -ExpandProperty value
+        while ($true) {
+            try {
+                $masterKey = (Invoke-RestMethod -Uri "https://$functionName.scm.azurewebsites.net/api/functions/admin/masterkey" -Headers $headers) | select -ExpandProperty masterkey
+                $defaultKey = (Invoke-RestMethod -Uri "https://$functionName.azurewebsites.net/admin/HOST/KEYS?CODE=$masterKey" -Headers $headers).keys | ? { $_.name -eq "default" } | select -ExpandProperty value
 
-        Write-Output "API Key: $defaultKey"        
+                Write-Output "API Key: $defaultKey"        
+                break
+            }
+            catch {
+                if ($retry++ -lt 10) {
+                    Write-Warning ($_.Exception.Message + " (waiting for retry $retry)")
+                    Start-Sleep -Seconds 10
+                }
+                else {
+                    throw
+                }
+            }            
+        }
     }
 }
