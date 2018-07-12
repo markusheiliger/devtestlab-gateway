@@ -23,7 +23,7 @@ namespace RDGatewayAPI.Functions
         {
             await Track(tokenTable, tokenEntity, log);
 
-            var userEntity = new UserEntity(tokenEntity.UserId.ToGuid());
+            var userEntity = new UserEntity(tokenEntity.UserId);
 
             await Track(userTable, userEntity, log);
         }

@@ -100,9 +100,12 @@ namespace RDGatewayAPI.Functions
             }
         }
 
-        private static void TrackToken(ICollector<string> collector, Guid correlationId, string token)
+        private static void TrackToken(ICollector<string> collector, Guid correlationId, Guid userId, string token)
         {
-            var tokenEntity = new TokenEntity(correlationId);
+            var tokenEntity = new TokenEntity(correlationId)
+            {
+                UserId = userId
+            };
 
             foreach (Match match in TokenParseExpression.Matches(token))
             {
@@ -151,7 +154,7 @@ namespace RDGatewayAPI.Functions
                 // get the signed authentication token
                 var response = new { token = GetToken(certificate, host, port) };
 
-                TrackToken(trackTokenQueue, req.GetCorrelationId(), response.token);
+                TrackToken(trackTokenQueue, req.GetCorrelationId(), userId, response.token);
 
                 return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
             }

@@ -15,18 +15,5 @@ namespace RDGatewayAPI
         {
             return JsonConvert.SerializeObject(tableEntity);
         }
-
-        public static Guid ToGuid(this string value)
-        {
-            if (Guid.TryParse(value, out Guid guid))
-            {
-                return guid;
-            }
-
-            using (MD5 md5 = MD5.Create())
-            {
-                return new Guid(md5.ComputeHash(Encoding.Default.GetBytes(value)));
-            }
-        }
     }
 }
