@@ -1,0 +1,129 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "labName": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "The name of the lab (default: the name of the containing resource group)."
+      }
+    },
+    "rdGatewayHostname": {
+      "type": "string",
+      "metadata": {
+        "description": "The public FQDN of the RDGateway host."
+      }
+    },
+    "rdGatewayAPIKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The key to authorize at the RDGateway API."
+      }
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "The base URI where artifacts required by this template are located. When the template is deployed using the accompanying scripts, a private location in the subscription will be used and this value will be automatically generated."
+      },
+      "defaultValue": "https://raw.githubusercontent.com/markusheiliger/devtestlab-gateway/master/arm/lab"
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated."
+      },
+      "defaultValue": ""
+    }
+  },
+  "variables": {
+    "labVirtualNetworkId": "[resourceId('Microsoft.Network/virtualNetworks', variables('labVirtualNetworkName'))]",
+    "labVirtualNetworkName": "[concat(parameters('labName'), 'VNet')]",
+    "labVirtualNetworkPrefix": "10.75.0.0/16",
+    "labSubnetId": "[concat(variables('labVirtualNetworkId'), '/subnets/', variables('labSubnetName'))]",
+    "labSubnetName": "LabSubnet",
+    "labSubnetPrefix": "10.75.0.0/20",
+    "rdGatewayTokenSecretName": "[uniqueString(resourceGroup().id)]"
+  },
+  "resources": [
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[variables('labVirtualNetworkName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('labVirtualNetworkPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('labSubnetName')]",
+            "properties": {
+              "addressPrefix": "[variables('labSubnetPrefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2017-04-26-preview",
+      "type": "Microsoft.DevTestLab/labs",
+      "name": "[parameters('labName')]",
+      "location": "[resourceGroup().location]",
+      "resources": [
+        {
+          "apiVersion": "2017-04-26-preview",
+          "name": "[variables('labVirtualNetworkName')]",
+          "type": "virtualNetworks",
+          "dependsOn": [
+            "[resourceId('Microsoft.DevTestLab/labs', parameters('labName'))]",
+            "[resourceId('Microsoft.Network/virtualNetworks', variables('labVirtualNetworkName'))]"
+          ],
+          "properties": {
+            "externalProviderResourceId": "[variables('labVirtualNetworkId')]",
+            "subnetOverrides": [
+              {
+                "name": "[variables('labSubnetName')]",
+                "resourceId": "[variables('labSubnetId')]",
+                "useInVmCreationPermission": "Allow",
+                "usePublicIpAddressPermission": "Allow"
+              }
+            ],
+            "extendedProperties": {
+              "RdpGateway": "[parameters('rdGatewayHostname')]",
+              "RdpGatewayTokenSecret": "[variables('rdGatewayTokenSecretName')]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "apiVersion": "2017-05-10",
+      "name": "[concat(deployment().name, '-token')]",
+      "type": "Microsoft.Resources/deployments",
+      "dependsOn": [
+        "[resourceId('Microsoft.DevTestLab/labs', parameters('labName'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "name": "[concat(last(split(reference(resourceId('Microsoft.DevTestLab/labs', parameters('labName'))).vaultName, '/')), '/', variables('rdGatewayTokenSecretName'))]",
+              "apiVersion": "2015-06-01",
+              "properties": {
+                "value": "[parameters('rdGatewayAPIKey')]"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": { }
+}
