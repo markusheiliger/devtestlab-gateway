@@ -93,7 +93,7 @@
             ],
             "extendedProperties": {
               "RdpGateway": "[parameters('rdGatewayHostname')]",
-              "RdpGatewayTokenSecret": "[variables('rdGatewayTokenSecretName')]"
+              "RdgTokenSecreteName": "[variables('rdGatewayTokenSecretName')]"
             }
           }
         }
