@@ -15,6 +15,12 @@
         "description": "The public FQDN of the RDGateway host."
       }
     },
+    "rdGatewayIP": {
+      "type": "string",
+      "metadata": {
+        "description": "The public IP of the RDGateway host."
+      }
+    },
     "rdGatewayAPIKey": {
       "type": "securestring",
       "metadata": {
@@ -38,19 +44,47 @@
   },
   "variables": {
     "labVirtualNetworkId": "[resourceId('Microsoft.Network/virtualNetworks', variables('labVirtualNetworkName'))]",
-    "labVirtualNetworkName": "[concat(parameters('labName'), 'VNet')]",
+    "labVirtualNetworkName": "[concat(parameters('labName'), '-VNet')]",
     "labVirtualNetworkPrefix": "10.75.0.0/16",
     "labSubnetId": "[concat(variables('labVirtualNetworkId'), '/subnets/', variables('labSubnetName'))]",
     "labSubnetName": "LabSubnet",
     "labSubnetPrefix": "10.75.0.0/20",
+    "labNetworkSecurityGroupName": "[concat(parameters('labName'), '-NSG')]",
     "rdGatewayTokenSecretName": "[uniqueString(resourceGroup().id)]"
   },
   "resources": [
     {
-      "apiVersion": "2015-06-15",
+      "apiVersion": "2018-01-01",
+      "name": "[variables('labNetworkSecurityGroupName')]",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "RDGateway",
+            "properties": {
+              "description": "Allows RDP traffic from RDGateway",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "[parameters('rdGatewayIP')]",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2018-01-01",
       "type": "Microsoft.Network/virtualNetworks",
       "name": "[variables('labVirtualNetworkName')]",
       "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('labNetworkSecurityGroupName'))]"
+      ],
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
@@ -62,6 +96,9 @@
             "name": "[variables('labSubnetName')]",
             "properties": {
               "addressPrefix": "[variables('labSubnetPrefix')]"
+            },
+            "networkSecurityGroup": {
+              "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('labNetworkSecurityGroupName'))]"
             }
           }
         ]
@@ -83,6 +120,7 @@
           "apiVersion": "2017-04-26-preview",
           "name": "[variables('labVirtualNetworkName')]",
           "type": "virtualNetworks",
+          "location": "[resourceGroup().location]",
           "dependsOn": [
             "[resourceId('Microsoft.DevTestLab/labs', parameters('labName'))]",
             "[resourceId('Microsoft.Network/virtualNetworks', variables('labVirtualNetworkName'))]"
