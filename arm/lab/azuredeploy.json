@@ -72,6 +72,12 @@
       "type": "Microsoft.DevTestLab/labs",
       "name": "[parameters('labName')]",
       "location": "[resourceGroup().location]",
+      "properties": {
+        "extendedProperties": {
+          "RdpGateway": "[parameters('rdGatewayHostname')]",
+          "RdgTokenSecretName": "[variables('rdGatewayTokenSecretName')]"
+        }
+      },
       "resources": [
         {
           "apiVersion": "2017-04-26-preview",
@@ -90,11 +96,7 @@
                 "useInVmCreationPermission": "Allow",
                 "usePublicIpAddressPermission": "Allow"
               }
-            ],
-            "extendedProperties": {
-              "RdpGateway": "[parameters('rdGatewayHostname')]",
-              "RdgTokenSecretName": "[variables('rdGatewayTokenSecretName')]"
-            }
+            ]
           }
         }
       ]
@@ -125,5 +127,5 @@
       }
     }
   ],
-  "outputs": { }
+  "outputs": {}
 }
