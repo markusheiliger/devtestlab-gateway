@@ -23,6 +23,12 @@
                 "description": "Number of gateway VMs to provision"
             }
         },
+        "tokenLifetime": {
+            "type": "string",
+            "defaultValue": "00:00:10",
+            "minLength": 8,
+            "maxLength": 8
+        },
         "sslCertificate": {
             "type": "string",
             "minLength": 1,
@@ -173,6 +179,9 @@
                     },
                     "signCertificateUrl": {
                         "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), variables('kvSecretSign'))).secretUriWithVersion]"
+                    },
+                    "tokenLifetime": {
+                        "value": "[parameters('tokenLifetime')]"
                     }
                 }
             }

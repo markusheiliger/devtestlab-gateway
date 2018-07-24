@@ -17,6 +17,10 @@
         "signCertificateUrl": {
             "type": "string",
             "defaultValue": ""
+        },
+        "tokenLifetime": {
+            "type": "string",
+            "defaultValue": ""
         }
     },
     "variables": {
@@ -69,6 +73,10 @@
                         {
                             "name": "SignCertificateUrl",
                             "value": "[parameters('signCertificateUrl')]"
+                        },
+                        {
+                            "name": "TokenLifetime",
+                            "value": "[parameters('tokenLifetime')]"
                         },
                         {
                             "name": "AzureWebJobsDashboard",
