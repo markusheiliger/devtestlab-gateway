@@ -175,18 +175,21 @@ else {
 
         $profileClient = New-Object Microsoft.Azure.Commands.ResourceManager.Common.RMProfileClient($azureRmProfile)
         $token = $profileClient.AcquireAccessToken((Get-AzureRmContext).Subscription.TenantId) 
-
         $functionName = $deploymentResult.Outputs.functionName.Value
-        $headers = @{"Authorization" = "Bearer $($token.AccessToken)"}
+
         $retry = 0
 
         while ($true) {
             try {
-                $masterKey = (Invoke-RestMethod -Uri "https://$functionName.scm.azurewebsites.net/api/functions/admin/masterkey" -Headers $headers) | select -ExpandProperty masterkey
-                $hostKeys = (Invoke-RestMethod -Uri "https://$functionName.azurewebsites.net/admin/HOST/KEYS?CODE=$masterKey" -Headers $headers) | select -ExpandProperty keys
+
+                # enforce TLS 1.2 for communication - otherwise both rest method calls will fail
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+                $masterKey = (Invoke-RestMethod -Uri "https://$functionName.scm.azurewebsites.net/api/functions/admin/masterkey" -Headers @{"Authorization" = "Bearer $($token.AccessToken)"}) | select -ExpandProperty masterkey
+                $hostKeys = (Invoke-RestMethod -Uri "https://$functionName.azurewebsites.net/admin/host/keys?code=$masterKey" -UseBasicParsing) | select -ExpandProperty keys
                 $defaultKey = $hostKeys | ? { $_.name -eq "default" } | select -First 1 -ExpandProperty value
 
-                Write-Output "API Key: $defaultKey"        
+                Write-Output "API Key: $defaultKey"
                 break
             }
             catch {
