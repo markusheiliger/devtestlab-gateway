@@ -95,10 +95,10 @@
           {
             "name": "[variables('labSubnetName')]",
             "properties": {
-              "addressPrefix": "[variables('labSubnetPrefix')]"
-            },
-            "networkSecurityGroup": {
-              "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('labNetworkSecurityGroupName'))]"
+              "addressPrefix": "[variables('labSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('labNetworkSecurityGroupName'))]"
+              }
             }
           }
         ]
