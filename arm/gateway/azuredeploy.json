@@ -292,18 +292,19 @@
                                 "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', variables('lbName'), 'LoadBalancerBackend')]"
                             },
                             "probe": {
-                                "id": "[resourceId('Microsoft.Network/loadBalancers/probes', variables('lbName'), 'Probe443')]"
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/probes', variables('lbName'), 'HealthCheck')]"
                             }
                         }
                     }
                 ],
                 "probes": [
                     {
-                        "name": "Probe443",
+                        "name": "HealthCheck",
                         "properties": {
-                            "protocol": "Tcp",
-                            "port": 443,
-                            "intervalInSeconds": 5,
+                            "protocol": "Http",
+                            "port": 80,
+                            "requestPath": "/api/health",
+                            "intervalInSeconds": 10,
                             "numberOfProbes": 2
                         }
                     }
