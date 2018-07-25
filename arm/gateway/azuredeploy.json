@@ -25,7 +25,7 @@
         },
         "tokenLifetime": {
             "type": "string",
-            "defaultValue": "00:00:10",
+            "defaultValue": "00:01:00",
             "minLength": 8,
             "maxLength": 8
         },
