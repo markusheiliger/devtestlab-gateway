@@ -313,7 +313,7 @@
                             "protocol": "Http",
                             "port": 80,
                             "requestPath": "/api/health",
-                            "intervalInSeconds": 10,
+                            "intervalInSeconds": 180,
                             "numberOfProbes": 2
                         }
                     }
