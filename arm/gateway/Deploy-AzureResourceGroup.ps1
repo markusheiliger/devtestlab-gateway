@@ -33,6 +33,26 @@ function Format-ValidationOutput {
     return @($ValidationOutput | Where-Object { $_ -ne $null } | ForEach-Object { @('  ' * $Depth + ': ' + $_.Message) + @(Format-ValidationOutput @($_.Details) ($Depth + 1)) })
 }
 
+function Export-AzureRmContext {
+
+    $ContextPath = [System.IO.Path]::ChangeExtension($PSCommandPath, '.ctx')
+    if (Test-Path $ContextPath -PathType Leaf) { Remove-Item -Path $ContextPath -Force | Out-Null }
+
+    $ContextClassic = [bool] (Get-Command -Name Save-AzureRmProfile -ErrorAction SilentlyContinue) # returns TRUE if AzureRM.profile version 2.7 or older is loaded
+    if ($ContextClassic) { Save-AzureRmProfile -Path $ContextPath } else { Save-AzureRmContext -Path $ContextPath -Force }
+
+    return $ContextPath
+}
+
+function Import-AzureRmContext {
+    param(
+        [string] $ContextPath = [System.IO.Path]::ChangeExtension($PSCommandPath, '.ctx')
+    )
+
+    $ContextClassic = [bool] (Get-Command -Name Save-AzureRmProfile -ErrorAction SilentlyContinue) # returns TRUE if AzureRM.profile version 2.7 or older is loaded
+    if ($contextClassic) { Select-AzureRMProfile -Path $ContextPath } else { Import-AzureRmContext -Path $ContextPath }
+}
+
 $OptionalParameters = New-Object -TypeName Hashtable
 $TemplateFile = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, $TemplateFile))
 $TemplateParametersFile = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, $TemplateParametersFile))
@@ -101,28 +121,62 @@ if ($Reset -and (Get-AzureRmResourceGroup -Name $ResourceGroupName -Location $Re
 
     if ($Force) { Get-AzureRmResourceGroupDeployment -ResourceGroupName $ResourceGroupName | ? { $_.ProvisioningState -eq "Running" } | Stop-AzureRmResourceGroupDeployment | Out-Null }
 
-    $resetDeploymentName = 'azurereset-' + ((Get-Date).ToUniversalTime()).ToString('MMdd-HHmm')
-    $resetTemplateFile = Join-Path $PSScriptRoot "azurereset.json"
+    $location = Get-AzureRmLocation | ? { $ResourceGroupLocation -in ($_.Location, $_.DisplayName) } | select -First 1 -ExpandProperty Location
 
-    if (Test-Path -Path $resetTemplateFile -PathType Leaf ) {
+    if ((Get-AzureRmResourceGroup -Name $ResourceGroupName | select -First 1).Location -eq $location) {
 
-        New-AzureRmResourceGroupDeployment -Name $resetDeploymentName `
-            -ResourceGroupName $ResourceGroupName `
-            -TemplateFile $resetTemplateFile
-        -TemplateParameterUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.parameters.json" `
-            -Force -Verbose -Mode Complete
+        $context = Export-AzureRmContext
 
-    }
-    else {
+        try {
+            
+            $jobs = (Get-AzureRmResourceGroupDeployment -ResourceGroupName $ResourceGroupName | % {
 
-        New-AzureRmResourceGroupDeployment -Name $resetDeploymentName `
-            -ResourceGroupName $ResourceGroupName `
-            -TemplateUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.json" `
-            -TemplateParameterUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.parameters.json" `
-            -Force -Verbose -Mode Complete
-    }
+                Start-Job -Name $_.DeploymentName -ScriptBlock {
+                    param([string] $ctx, [string] $rgName, [string] $depName)
+                    $ContextClassic = [bool] (Get-Command -Name Select-AzureRMProfile -ErrorAction SilentlyContinue)
+                    if  ($ContextClassic) { Select-AzureRMProfile -Path $ctx } else { Import-AzureRmContext -Path $ctx }
+                    Remove-AzureRmResourceGroupDeployment -ResourceGroupName $rgName -Name $depName -Verbose | Out-Null
+                } -ArgumentList ($context, $ResourceGroupName, $_.DeploymentName)
 
-    Get-AzureRmResourceGroupDeployment -ResourceGroupName $ResourceGroupName | Remove-AzureRmResourceGroupDeployment | Out-Null
+            })
+
+            if ($jobs) {
+
+                Write-Output "Delete existing deployments ..."
+                $jobs | Wait-Job | Out-Null
+                $jobs | % { Write-Output "- $($_.Name)" }
+            }
+        }
+        finally {
+
+            Remove-Item -Path $context -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        $resetDeploymentName = 'azurereset-' + ((Get-Date).ToUniversalTime()).ToString('MMdd-HHmm')
+        $resetTemplateFile = Join-Path $PSScriptRoot "azurereset.json"
+    
+        if (Test-Path -Path $resetTemplateFile -PathType Leaf ) {
+    
+            New-AzureRmResourceGroupDeployment -Name $resetDeploymentName `
+                -ResourceGroupName $ResourceGroupName `
+                -TemplateFile $resetTemplateFile
+                -TemplateParameterUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.parameters.json" `
+                -Force -Verbose -Mode Complete
+    
+        } else {
+    
+            New-AzureRmResourceGroupDeployment -Name $resetDeploymentName `
+                -ResourceGroupName $ResourceGroupName `
+                -TemplateUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.json" `
+                -TemplateParameterUri "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/100-blank-template/azuredeploy.parameters.json" `
+                -Force -Verbose -Mode Complete
+        }
+
+    } else {
+
+        Remove-AzureRmResourceGroup -Name $ResourceGroupName -Force -Verbose | Out-Null
+    } 
+    
 }
 
 # Create or update the resource group using the specified template file and template parameters file
