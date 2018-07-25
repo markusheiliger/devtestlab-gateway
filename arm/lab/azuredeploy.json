@@ -111,6 +111,7 @@
       "location": "[resourceGroup().location]",
       "properties": {
         "extendedProperties": {
+          "RdpConnectionType": "2",
           "RdpGateway": "[parameters('rdGatewayHostname')]",
           "RdgTokenSecretName": "[variables('rdGatewayTokenSecretName')]"
         }
