@@ -23,6 +23,13 @@
                 "description": "Number of gateway VMs to provision"
             }
         },
+        "alwaysOn": {
+            "type":"bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Keep the API in a warm state to avoid startup delays"
+            }
+        },
         "tokenLifetime": {
             "type": "string",
             "defaultValue": "00:01:00",
@@ -293,15 +300,36 @@
                             "frontendPort": 443,
                             "backendPort": 443,
                             "enableFloatingIP": false,
-                            "idleTimeoutInMinutes": 4,
+                            "idleTimeoutInMinutes": 5,
                             "protocol": "Tcp",
                             "enableDestinationServiceEndpoint": false,
-                            "loadDistribution": "SourceIP",
+                            "loadDistribution": "SourceIPProtocol",
                             "backendAddressPool": {
                                 "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', variables('lbName'), 'LoadBalancerBackend')]"
                             },
                             "probe": {
-                                "id": "[resourceId('Microsoft.Network/loadBalancers/probes', variables('lbName'), 'HealthCheck')]"
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/probes', variables('lbName'), if(parameters('alwaysOn'), 'HealthCheck', 'Probe443'))]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "Balance3391",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', variables('lbName'), 'LoadBalancerFrontend')]"
+                            },
+                            "frontendPort": 443,
+                            "backendPort": 443,
+                            "enableFloatingIP": false,
+                            "idleTimeoutInMinutes": 5,
+                            "protocol": "Udp",
+                            "enableDestinationServiceEndpoint": false,
+                            "loadDistribution": "SourceIPProtocol",
+                            "backendAddressPool": {
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', variables('lbName'), 'LoadBalancerBackend')]"
+                            },
+                            "probe": {
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/probes', variables('lbName'), 'Probe3391')]"
                             }
                         }
                     }
@@ -313,7 +341,25 @@
                             "protocol": "Http",
                             "port": 80,
                             "requestPath": "/api/health",
-                            "intervalInSeconds": 180,
+                            "intervalInSeconds": 300,
+                            "numberOfProbes": 2
+                        }
+                    },
+                    {
+                        "name": "Probe443",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "port": 443,
+                            "intervalInSeconds": 5,
+                            "numberOfProbes": 2
+                        }
+                    },
+                    {
+                        "name": "Probe3391",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "port": 3391,
+                            "intervalInSeconds": 5,
                             "numberOfProbes": 2
                         }
                     }
@@ -421,7 +467,7 @@
             "type": "string",
             "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))).ipAddress]"
         },
-        "functionName":{
+        "functionName": {
             "type": "string",
             "value": "[reference(resourceId('Microsoft.Resources/deployments', variables('deployFunctionInit'))).outputs.functionName.value]"
         },
