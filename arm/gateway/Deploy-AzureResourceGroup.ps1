@@ -33,7 +33,7 @@ function Format-ValidationOutput {
     return @($ValidationOutput | Where-Object { $_ -ne $null } | ForEach-Object { @('  ' * $Depth + ': ' + $_.Message) + @(Format-ValidationOutput @($_.Details) ($Depth + 1)) })
 }
 
-function Export-AzureRmContext {
+function Export-AzureRmContextFile {
 
     $ContextPath = [System.IO.Path]::ChangeExtension($PSCommandPath, '.ctx')
     if (Test-Path $ContextPath -PathType Leaf) { Remove-Item -Path $ContextPath -Force | Out-Null }
@@ -44,12 +44,12 @@ function Export-AzureRmContext {
     return $ContextPath
 }
 
-function Import-AzureRmContext {
+function Import-AzureRmContextFile {
     param(
         [string] $ContextPath = [System.IO.Path]::ChangeExtension($PSCommandPath, '.ctx')
     )
 
-    $ContextClassic = [bool] (Get-Command -Name Save-AzureRmProfile -ErrorAction SilentlyContinue) # returns TRUE if AzureRM.profile version 2.7 or older is loaded
+    $ContextClassic = [bool] (Get-Command -Name Select-AzureRMProfile -ErrorAction SilentlyContinue) # returns TRUE if AzureRM.profile version 2.7 or older is loaded
     if ($contextClassic) { Select-AzureRMProfile -Path $ContextPath } else { Import-AzureRmContext -Path $ContextPath }
 }
 
