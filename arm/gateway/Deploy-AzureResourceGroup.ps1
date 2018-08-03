@@ -125,7 +125,7 @@ if ($Reset -and (Get-AzureRmResourceGroup -Name $ResourceGroupName -Location $Re
 
     if ((Get-AzureRmResourceGroup -Name $ResourceGroupName | select -First 1).Location -eq $location) {
 
-        $context = Export-AzureRmContext
+        $context = Export-AzureRmContextFile
 
         try {
             
