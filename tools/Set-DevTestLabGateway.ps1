@@ -61,13 +61,13 @@ function Set-ExtendedProperty {
 
     if ($ExtendedProperties | Get-Member -Name $Key -MemberType NoteProperty) {
 
-        if ($Key) {
+        if ($Value) {
 
-            $ExtendedProperties | Set-ItemProperty -Name $Key -Value $Value | Out-Null
+            $ExtendedProperties.$Key = $Value
 
         } else {
 
-            $ExtendedProperties | Remove-ItemProperty -Name $Key | Out-Null
+            $ExtendedProperties.psobject.properties.remove($Key)
         }    
 
     } else {
@@ -91,7 +91,7 @@ function Get-ExtendedProperty {
 
     if ($ExtendedProperties | Get-Member -Name $Key -MemberType NoteProperty) {
 
-        return $ExtendedProperties | Get-ItemProperty -Name $Key
+        return $ExtendedProperties.$Key
     } 
     
     return $null
@@ -135,13 +135,13 @@ else {
 
     Set-ExtendedProperty -ExtendedProperties $properties.extendedProperties -Key "RdpGateway" -Value $GatewayHostname | Out-Null
 
-    $tokenSecretName = Get-ExtendedProperty -ExtendedProperty -ExtendedProperties $properties.extendedProperties -Key "RdgTokenSecretName"
+    $tokenSecretName = Get-ExtendedProperty -ExtendedProperties $properties.extendedProperties -Key "RdgTokenSecretName"
 
     if ((-not $GatewayHostname) -or (-not $GatewayAPIKey)) {
 
         Set-ExtendedProperty -ExtendedProperties $properties.extendedProperties -Key "RdgTokenSecretName" | Out-Null
     }
-    else if (-not $tokenSecretName) {
+    elseif (-not $tokenSecretName) {
 
         $tokenSecretName = Set-ExtendedProperty -ExtendedProperties $properties.extendedProperties -Key "RdgTokenSecretName" -Value (((65..90) + (97..122) | Get-Random -Count 13 | % {[char]$_ }) -join "")
     }
@@ -167,6 +167,32 @@ else {
     }
 
     Set-AzureRmResource -ResourceId $LabResourceId -Properties $properties -ApiVersion $apiVersion -Pre -Force -Verbose | Out-Null
+
+    Find-AzureRmResource -ResourceType 'Microsoft.Network/networkSecurityGroups' -ResourceGroupNameEquals (Get-AzureRmResource -ResourceId $LabResourceId | select -ExpandProperty ResourceGroupName) | % {
+
+        $nsg = Get-AzureRmNetworkSecurityGroup -Name $_.ResourceName -ResourceGroupName $_.ResourceGroupName
+
+        if ($nsg) {
+
+            $nsg.SecurityRules | ? { $_.Protocol -eq "Tcp" -and $_.DestinationPortRange -eq 3389 } | % {
+
+                $sourceAddressPrefix = New-Object System.Collections.Generic.List[string]
+
+                if ($GatewayHostname) {
+
+                    ([System.Net.Dns]::GetHostAddresses($GatewayHostname) | select -ExpandProperty IPAddressToString) | % { $sourceAddressPrefix.Add($_) }
+
+                } else {
+
+                    $sourceAddressPrefix.Add("*")
+                }     
+                
+                $_.SourceAddressPrefix = $sourceAddressPrefix
+            }
+
+            Set-AzureRmNetworkSecurityGroup -NetworkSecurityGroup $nsg -Verbose | Out-Null
+        }
+    }
 
     Write-Output "Updated lab '$LabResourceId'"
 }
