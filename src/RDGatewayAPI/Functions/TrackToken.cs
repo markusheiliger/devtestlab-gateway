@@ -17,20 +17,20 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------------------------------ */
 
-using System;
 using System.Threading.Tasks;
+using Microsoft.Azure.Cosmos.Table;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Host;
-using Microsoft.WindowsAzure.Storage.Table;
+using Microsoft.Extensions.Logging;
 using RDGatewayAPI.Data;
 
 namespace RDGatewayAPI.Functions
 {
     public static class TrackToken
     {
-        private static async Task Track(CloudTable table, ITableEntity entity, TraceWriter log)
+        private static async Task Track(CloudTable table, ITableEntity entity, ILogger log)
         {
-            log.Info($"Track {entity.GetType().Name}: {entity.RowKey}");
+            log.LogInformation($"Track {entity.GetType().Name}: {entity.RowKey}");
 
             var operation = TableOperation.InsertOrReplace(entity);
 
@@ -38,7 +38,7 @@ namespace RDGatewayAPI.Functions
         }
 
         [FunctionName("TrackToken")]
-        public static async Task Run([QueueTrigger("track-token")]TokenEntity tokenEntity, [Table("tokens")] CloudTable tokenTable, [Table("users")] CloudTable userTable, TraceWriter log)
+        public static async Task Run([QueueTrigger("track-token")] TokenEntity tokenEntity, [Table("tokens")] CloudTable tokenTable, [Table("users")] CloudTable userTable, ILogger log)
         {
             await Track(tokenTable, tokenEntity, log);
 

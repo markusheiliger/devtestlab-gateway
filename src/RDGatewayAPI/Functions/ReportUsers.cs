@@ -18,19 +18,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 ------------------------------------------------------------------------------------------------ */
 
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
-using System.Web;
-using System.Xml;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.Cosmos.Table;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.Azure.WebJobs.Host;
-using Microsoft.WindowsAzure.Storage.Table;
+using Microsoft.Extensions.Logging;
 using RDGatewayAPI.Data;
 
 namespace RDGatewayAPI.Functions
@@ -39,8 +33,8 @@ namespace RDGatewayAPI.Functions
     {
 
         [FunctionName("ReportUsers")]
-        public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "report/users")]HttpRequestMessage req,
-                                                          [Table("users")] CloudTable userTable, TraceWriter log)
+        public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "report/users")] HttpRequest req,
+                                                          [Table("users")] CloudTable userTable, ILogger log)
         {
             var continuationToken = default(TableContinuationToken);
 
@@ -50,9 +44,9 @@ namespace RDGatewayAPI.Functions
             }
             catch (Exception exc)
             {
-                log.Error($"Failed to deserialize continuation token", exc);
+                log.LogError($"Failed to deserialize continuation token", exc);
 
-                return req.CreateResponse(HttpStatusCode.BadRequest);
+                return new BadRequestResult();
             }
 
             var segment = await userTable.ExecuteQuerySegmentedAsync<UserEntity>(new TableQuery<UserEntity>(), continuationToken).ConfigureAwait(false);
@@ -62,7 +56,7 @@ namespace RDGatewayAPI.Functions
                 NextLink = (segment.ContinuationToken != null ? PagedEntities<UserEntity>.GetNextLink(req, segment.ContinuationToken) : null)
             };
 
-            return req.CreateResponse(HttpStatusCode.OK, result, "application/json");
+            return new OkObjectResult(result);
         }
     }
 }

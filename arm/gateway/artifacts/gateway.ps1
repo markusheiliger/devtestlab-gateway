@@ -76,8 +76,7 @@ function Install-ApplicationRequestRouting {
         [string] $Hostname
     )
 
-    @( "http://go.microsoft.com/fwlink/?LinkID=615137", "http://go.microsoft.com/fwlink/?LinkID=615136" ) | % {
-
+    @( "https://www.microsoft.com/web/handlers/webpi.ashx?command=getinstallerredirect&appid=urlrewrite2", "http://go.microsoft.com/fwlink/?LinkID=615136" ) | % {
         $msiPath = (Join-Path $PSScriptRoot ($_.Substring($_.LastIndexOf("=") + 1))) + ".msi"
         $logPath = [System.IO.Path]::ChangeExtension($msiPath, ".log")
 
@@ -158,6 +157,8 @@ try {
     # set gateway signing certificate
     $wmi = Get-WmiObject -computername $env:COMPUTERNAME -NameSpace "root\TSGatewayFedAuth2" -Class "FedAuthSettings"
     $wmi.TrustedIssuerCertificates = $SignCertificateThumbprint
+    $wmi.IdleTimeoutMinutes = 120
+    $wmi.SessionTimeoutMinutes = 720
     $wmi.Put() 
 
     # register FedAuth plug-in at gateway

@@ -17,22 +17,41 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------------------------------ */
 
-using Microsoft.WindowsAzure.Storage.Table;
-using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Azure.Cosmos.Table;
+using Newtonsoft.Json;
 
 namespace RDGatewayAPI
 {
     public static class Extensions
     {
+        private const string CORRELATION_ID_HEADER = "X-Correlation-Id";
+
         public static string ToJson(this ITableEntity tableEntity)
         {
+            if (tableEntity is null)
+            {
+                throw new System.ArgumentNullException(nameof(tableEntity));
+            }
+
             return JsonConvert.SerializeObject(tableEntity);
+        }
+
+        public static Guid GetCorrelationId(this HttpRequest httpRequest)
+        {
+            if (httpRequest is null)
+            {
+                throw new System.ArgumentNullException(nameof(httpRequest));
+            }
+
+            if (httpRequest.Headers.TryGetValue(CORRELATION_ID_HEADER, out var correlationIdHeaders) && Guid.TryParse(correlationIdHeaders.First(), out var correlationId))
+            {
+                return correlationId;
+            }
+
+            return Guid.NewGuid();
         }
     }
 }

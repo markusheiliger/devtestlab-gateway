@@ -22,18 +22,19 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Globalization;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Web.Http;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.KeyVault;
 using Microsoft.Azure.Services.AppAuthentication;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.Azure.WebJobs.Host;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using RDGatewayAPI.Data;
 
@@ -151,18 +152,18 @@ namespace RDGatewayAPI.Functions
         }
 
         [FunctionName("CreateToken")]
-        public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "host/{host}/port/{port}")]HttpRequestMessage req,
-                                                          [Queue("track-token")]  ICollector<string> trackTokenQueue,
-                                                          TraceWriter log, ExecutionContext executionContext,
+        public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "host/{host}/port/{port}")] HttpRequest req,
+                                                          [Queue("track-token")] ICollector<string> trackTokenQueue,
+                                                          ILogger log, ExecutionContext executionContext,
                                                           string host, int port)
         {
-            var user = req.Headers.TryGetValues(USER_OBJECTID_HEADER, out IEnumerable<string> values) ? values.FirstOrDefault() : default(string);
+            var user = req.Headers.TryGetValue(USER_OBJECTID_HEADER, out var values) ? values.FirstOrDefault() : default;
 
             if (string.IsNullOrEmpty(user) || !Guid.TryParse(user, out Guid userId))
             {
-                log.Error($"BadRequest - missing or invalid request header '{USER_OBJECTID_HEADER}'");
+                log.LogError($"BadRequest - missing or invalid request header '{USER_OBJECTID_HEADER}'");
 
-                return req.CreateResponse(HttpStatusCode.BadRequest);
+                return new BadRequestResult();
             }
 
             try
@@ -175,13 +176,13 @@ namespace RDGatewayAPI.Functions
 
                 TrackToken(trackTokenQueue, req.GetCorrelationId(), userId, response.token);
 
-                return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
+                return new OkObjectResult(response);
             }
             catch (Exception exc)
             {
-                log.Error($"Failed to process request {executionContext.InvocationId}", exc);
+                log.LogError($"Failed to process request {executionContext.InvocationId}", exc);
 
-                return req.CreateResponse(HttpStatusCode.InternalServerError);
+                return new InternalServerErrorResult();
             }
         }
     }

@@ -17,21 +17,12 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------------------------------ */
 
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
-using System.Web;
-using System.Xml;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.Azure.WebJobs.Host;
-using Microsoft.WindowsAzure.Storage.Table;
-using RDGatewayAPI.Data;
+using Microsoft.Extensions.Logging;
 
 namespace RDGatewayAPI.Functions
 {
@@ -39,8 +30,8 @@ namespace RDGatewayAPI.Functions
     {
 
         [FunctionName("HealthCheck")]
-        public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "health")]HttpRequestMessage req, TraceWriter log)
-        {           
+        public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "health")] HttpRequestMessage req, ILogger log)
+        {
             // This function is used to by the Azure LB to check the backend health.
             // Add additional checks, if you need more precise health reporting for 
             // the load balancer probes.
