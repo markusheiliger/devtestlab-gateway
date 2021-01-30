@@ -18,7 +18,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 ------------------------------------------------------------------------------------------------ */
 
 using System;
-using System.Collections.Generic;
 using System.Configuration;
 using System.Globalization;
 using System.Linq;
@@ -88,7 +87,7 @@ namespace RDGatewayAPI.Functions
             // wrap the machine token
             return string.Format(CultureInfo.InvariantCulture, AUTH_TOKEN_PATTERN, machineToken, certificate.Thumbprint, Uri.EscapeDataString(Convert.ToBase64String(machineTokenSignature)));
 
-            Int64 GetPosixLifetime()
+            static long GetPosixLifetime()
             {
                 DateTime endOfLife;
 
@@ -116,7 +115,7 @@ namespace RDGatewayAPI.Functions
                 }
 
                 // return lifetime in posix format
-                return (Int64)endOfLife.Subtract(PosixBaseTime).TotalSeconds;
+                return (long)endOfLife.Subtract(PosixBaseTime).TotalSeconds;
             }
         }
 
