@@ -39,7 +39,7 @@ namespace RDGatewayAPI
             return JsonConvert.SerializeObject(tableEntity);
         }
 
-        public static Guid GetCorrelationId(this HttpRequest httpRequest)
+        public static Guid? GetCorrelationId(this HttpRequest httpRequest)
         {
             if (httpRequest is null)
             {
@@ -51,7 +51,7 @@ namespace RDGatewayAPI
                 return correlationId;
             }
 
-            return Guid.NewGuid();
+            return null;
         }
     }
 }

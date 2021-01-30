@@ -18,106 +18,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 ------------------------------------------------------------------------------------------------ */
 
 using System;
-using System.Configuration;
-using System.Globalization;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.KeyVault;
-using Microsoft.Azure.Services.AppAuthentication;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using RDGatewayAPI.Data;
 
 namespace RDGatewayAPI.Functions
 {
     public static class CreateToken
     {
-        private const string AZURE_MANAGEMENT_API = "https://management.azure.com/";
-        private const string MACHINE_TOKEN_PATTERN = "Host={0}&Port={1}&ExpiresOn={2}";
-        private const string AUTH_TOKEN_PATTERN = "{0}&Signature=1|SHA256|{1}|{2}";
         private const string USER_OBJECTID_HEADER = "x-ms-client-object-id";
 
-        private static readonly AzureServiceTokenProvider AzureManagementApiTokenProvider = new AzureServiceTokenProvider();
-        private static readonly DateTime PosixBaseTime = new DateTime(1970, 1, 1, 0, 0, 0, 0);
         private static readonly Regex TokenParseExpression = new Regex("(?<key>Host|Port|ExpiresOn)=(?<value>.+?)(?=&)", RegexOptions.Compiled);
 
-        private static async Task<X509Certificate2> GetCertificateAsync()
-        {
-            var signCertificateUrl = default(string);
-
-            try
-            {
-                signCertificateUrl = Environment.GetEnvironmentVariable("SignCertificateUrl");
-
-                // init a key vault client
-                var keyVaultClient = new KeyVaultClient(new KeyVaultClient.AuthenticationCallback(AzureManagementApiTokenProvider.KeyVaultTokenCallback));
-
-                // get the base64 encoded secret and decode
-                var signCertificateSecret = await keyVaultClient.GetSecretAsync(signCertificateUrl).ConfigureAwait(false);
-                var signCertificateBuffer = Convert.FromBase64String(signCertificateSecret.Value);
-
-                // unwrap the json data envelope
-                var envelope = JsonConvert.DeserializeAnonymousType(Encoding.UTF8.GetString(signCertificateBuffer), new { data = string.Empty, password = string.Empty });
-
-                // return the certificate
-                return new X509Certificate2(Convert.FromBase64String(envelope.data), envelope.password, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
-            }
-            catch (Exception exc)
-            {
-                throw new Exception($"Failed to load certificate from KeyVault by URL '{signCertificateUrl}'", exc);
-            }
-        }
-
-        private static string GetToken(X509Certificate2 certificate, string host, int port)
-        {
-            // create the machine token and sign the data
-            var machineToken = string.Format(CultureInfo.InvariantCulture, MACHINE_TOKEN_PATTERN, host, port, GetPosixLifetime());
-            var machineTokenBuffer = Encoding.ASCII.GetBytes(machineToken);
-            var machineTokenSignature = certificate.GetRSAPrivateKey().SignData(machineTokenBuffer, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-
-            // wrap the machine token
-            return string.Format(CultureInfo.InvariantCulture, AUTH_TOKEN_PATTERN, machineToken, certificate.Thumbprint, Uri.EscapeDataString(Convert.ToBase64String(machineTokenSignature)));
-
-            static long GetPosixLifetime()
-            {
-                DateTime endOfLife;
-
-                var tokenLifetime = Environment.GetEnvironmentVariable("TokenLifetime");
-
-                if (string.IsNullOrEmpty(tokenLifetime))
-                {
-                    // default lifetime is 1 minute
-                    endOfLife = DateTime.UtcNow.AddMinutes(1);
-                }
-                else
-                {
-                    try
-                    {
-                        // parse token lifetime
-                        var duration = TimeSpan.Parse(tokenLifetime);
-
-                        // apply lifetime from configuration
-                        endOfLife = DateTime.UtcNow.Add(duration);
-                    }
-                    catch (Exception exc)
-                    {
-                        throw new ConfigurationErrorsException($"Failed to parse token lifetime '{tokenLifetime}' from configuration", exc);
-                    }
-                }
-
-                // return lifetime in posix format
-                return (long)endOfLife.Subtract(PosixBaseTime).TotalSeconds;
-            }
-        }
 
         private static void TrackToken(ICollector<string> collector, Guid correlationId, Guid userId, string token)
         {
@@ -150,11 +69,12 @@ namespace RDGatewayAPI.Functions
             collector.Add(tokenEntity.ToJson());
         }
 
-        [FunctionName("CreateToken")]
-        public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "host/{host}/port/{port}")] HttpRequest req,
-                                                          [Queue("track-token")] ICollector<string> trackTokenQueue,
-                                                          ILogger log, ExecutionContext executionContext,
-                                                          string host, int port)
+        [FunctionName(nameof(CreateToken))]
+        public static async Task<IActionResult> Run(
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "host/{host}/port/{port}")] HttpRequest req,
+            [Queue("track-token")] ICollector<string> trackTokenQueue,
+            ILogger log, ExecutionContext executionContext,
+            string host, int port)
         {
             var user = req.Headers.TryGetValue(USER_OBJECTID_HEADER, out var values) ? values.FirstOrDefault() : default;
 
@@ -167,13 +87,9 @@ namespace RDGatewayAPI.Functions
 
             try
             {
-                // get the signing certificate
-                var certificate = await GetCertificateAsync().ConfigureAwait(false);
+                var response = new { token = await TokenFactory.GetTokenAsync(host, port).ConfigureAwait(false) };
 
-                // get the signed authentication token
-                var response = new { token = GetToken(certificate, host, port) };
-
-                TrackToken(trackTokenQueue, req.GetCorrelationId(), userId, response.token);
+                TrackToken(trackTokenQueue, req.GetCorrelationId().GetValueOrDefault(executionContext.InvocationId), userId, response.token);
 
                 return new OkObjectResult(response);
             }

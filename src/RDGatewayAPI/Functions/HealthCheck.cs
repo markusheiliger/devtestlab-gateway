@@ -17,26 +17,41 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------------------------------ */
 
+using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using RDGatewayAPI.Data;
 
 namespace RDGatewayAPI.Functions
 {
     public static class HealthCheck
     {
 
-        [FunctionName("HealthCheck")]
-        public static Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "health")] HttpRequest req, ILogger log)
+        [FunctionName(nameof(HealthCheck))]
+        public static async Task<IActionResult> Run(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "health")] HttpRequest req,
+            ILogger log)
         {
             // This function is used to by the Azure LB to check the backend health.
             // Add additional checks, if you need more precise health reporting for 
             // the load balancer probes.
 
-            return Task.FromResult<IActionResult>(new OkResult());
+            try
+            {
+                _ = await TokenFactory.GetCertificateAsync().ConfigureAwait(false);
+
+                return new OkResult();
+            }
+            catch (Exception exc)
+            {
+                log.LogError(exc, $"HealthCheck failed: {exc.Message}");
+
+                throw;
+            }
         }
     }
 }

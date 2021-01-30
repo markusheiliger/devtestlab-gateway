@@ -31,9 +31,11 @@ namespace RDGatewayAPI.Functions
 {
     public static class ReportTokens
     {
-        [FunctionName("ReportTokens")]
-        public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", Route = "report/tokens")] HttpRequest req,
-                                                          [Table("tokens")] CloudTable tokenTable, ILogger log)
+        [FunctionName(nameof(ReportTokens))]
+        public static async Task<IActionResult> Run(
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "report/tokens")] HttpRequest req,
+            [Table("tokens")] CloudTable tokenTable,
+            ILogger log)
         {
             var continuationToken = default(TableContinuationToken);
 

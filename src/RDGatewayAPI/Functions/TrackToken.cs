@@ -20,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos.Table;
 using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Extensions.Logging;
 using RDGatewayAPI.Data;
 
@@ -37,8 +36,12 @@ namespace RDGatewayAPI.Functions
             await table.ExecuteAsync(operation).ConfigureAwait(false);
         }
 
-        [FunctionName("TrackToken")]
-        public static async Task Run([QueueTrigger("track-token")] TokenEntity tokenEntity, [Table("tokens")] CloudTable tokenTable, [Table("users")] CloudTable userTable, ILogger log)
+        [FunctionName(nameof(TrackToken))]
+        public static async Task Run(
+            [QueueTrigger("track-token")] TokenEntity tokenEntity,
+            [Table("tokens")] CloudTable tokenTable,
+            [Table("users")] CloudTable userTable,
+            ILogger log)
         {
             await Track(tokenTable, tokenEntity, log);
 
