@@ -8,18 +8,32 @@ using System.Text;
 using System.Threading.Tasks;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
+using Microsoft.Extensions.Caching.Memory;
 using Newtonsoft.Json;
 
-namespace RDGatewayAPI.Data
+namespace RDGatewayAPI.Services
 {
-    internal static class TokenFactory
+    public interface ITokenService
+    {
+        Task<X509Certificate2> GetCertificateAsync();
+
+        Task<string> GetTokenAsync(string host, int port, X509Certificate2 certificate = null);
+    }
+
+    public sealed class TokenService : ITokenService
     {
         private const string MACHINE_TOKEN_PATTERN = "Host={0}&Port={1}&ExpiresOn={2}";
         private const string AUTH_TOKEN_PATTERN = "{0}&Signature=1|SHA256|{1}|{2}";
 
         private static readonly DateTime PosixBaseTime = new DateTime(1970, 1, 1, 0, 0, 0, 0);
+        private readonly IMemoryCache cache;
 
-        public static async Task<X509Certificate2> GetCertificateAsync()
+        public TokenService(IMemoryCache cache)
+        {
+            this.cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        }
+
+        public Task<X509Certificate2> GetCertificateAsync()
         {
             var signCertificateUrl = default(Uri);
 
@@ -27,19 +41,24 @@ namespace RDGatewayAPI.Data
             {
                 signCertificateUrl = new Uri(Environment.GetEnvironmentVariable("SignCertificateUrl"), UriKind.Absolute);
 
-                var secretClient = new SecretClient(new Uri(signCertificateUrl.GetLeftPart(UriPartial.Authority)), new DefaultAzureCredential());
-                var secretName = signCertificateUrl.Segments.Skip(2).FirstOrDefault()?.Trim('/');
-                var secretVersion = signCertificateUrl.Segments.Skip(3).FirstOrDefault()?.Trim('/');
+                return cache.GetOrCreateAsync(signCertificateUrl, async cacheEntry =>
+                {
+                    cacheEntry.SetSlidingExpiration(TimeSpan.FromMinutes(30));
 
-                // get the base64 encoded secret and decode
-                var signCertificateSecret = await secretClient.GetSecretAsync(secretName, secretVersion).ConfigureAwait(false);
-                var signCertificateBuffer = Convert.FromBase64String(signCertificateSecret.Value.Value);
+                    var secretClient = new SecretClient(new Uri(signCertificateUrl.GetLeftPart(UriPartial.Authority)), new DefaultAzureCredential());
+                    var secretName = signCertificateUrl.Segments.Skip(2).FirstOrDefault()?.Trim('/');
+                    var secretVersion = signCertificateUrl.Segments.Skip(3).FirstOrDefault()?.Trim('/');
 
-                // unwrap the json data envelope
-                var envelope = JsonConvert.DeserializeAnonymousType(Encoding.UTF8.GetString(signCertificateBuffer), new { data = string.Empty, password = string.Empty });
+                    // get the base64 encoded secret and decode
+                    var signCertificateSecret = await secretClient.GetSecretAsync(secretName, secretVersion).ConfigureAwait(false);
+                    var signCertificateBuffer = Convert.FromBase64String(signCertificateSecret.Value.Value);
 
-                // return the certificate
-                return new X509Certificate2(Convert.FromBase64String(envelope.data), envelope.password, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
+                    // unwrap the json data envelope
+                    var envelope = JsonConvert.DeserializeAnonymousType(Encoding.UTF8.GetString(signCertificateBuffer), new { data = string.Empty, password = string.Empty });
+
+                    // return the certificate
+                    return new X509Certificate2(Convert.FromBase64String(envelope.data), envelope.password, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
+                });
             }
             catch (Exception exc)
             {
@@ -47,7 +66,7 @@ namespace RDGatewayAPI.Data
             }
         }
 
-        public static async Task<string> GetTokenAsync(string host, int port, X509Certificate2 certificate = null)
+        public async Task<string> GetTokenAsync(string host, int port, X509Certificate2 certificate = null)
         {
             certificate ??= await GetCertificateAsync().ConfigureAwait(false);
 

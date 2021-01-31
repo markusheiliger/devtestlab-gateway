@@ -24,15 +24,21 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using RDGatewayAPI.Data;
+using RDGatewayAPI.Services;
 
 namespace RDGatewayAPI.Functions
 {
-    public static class HealthCheck
+    public sealed class HealthCheck
     {
+        private readonly ITokenService tokenService;
+
+        public HealthCheck(ITokenService tokenService)
+        {
+            this.tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
+        }
 
         [FunctionName(nameof(HealthCheck))]
-        public static async Task<IActionResult> Run(
+        public async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "health")] HttpRequest req,
             ILogger log)
         {
@@ -42,7 +48,7 @@ namespace RDGatewayAPI.Functions
 
             try
             {
-                _ = await TokenFactory.GetCertificateAsync().ConfigureAwait(false);
+                _ = await tokenService.GetCertificateAsync().ConfigureAwait(false);
 
                 return new OkResult();
             }

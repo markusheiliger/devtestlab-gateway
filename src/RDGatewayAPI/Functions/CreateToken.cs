@@ -28,15 +28,17 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using RDGatewayAPI.Data;
+using RDGatewayAPI.Services;
 
 namespace RDGatewayAPI.Functions
 {
-    public static class CreateToken
+    public sealed class CreateToken
     {
         private const string USER_OBJECTID_HEADER = "x-ms-client-object-id";
 
         private static readonly Regex TokenParseExpression = new Regex("(?<key>Host|Port|ExpiresOn)=(?<value>.+?)(?=&)", RegexOptions.Compiled);
 
+        private readonly ITokenService tokenService;
 
         private static void TrackToken(ICollector<string> collector, Guid correlationId, Guid userId, string token)
         {
@@ -69,8 +71,13 @@ namespace RDGatewayAPI.Functions
             collector.Add(tokenEntity.ToJson());
         }
 
+        public CreateToken(ITokenService tokenService)
+        {
+            this.tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
+        }
+
         [FunctionName(nameof(CreateToken))]
-        public static async Task<IActionResult> Run(
+        public async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "get", Route = "host/{host}/port/{port}")] HttpRequest req,
             [Queue("track-token")] ICollector<string> trackTokenQueue,
             ILogger log, ExecutionContext executionContext,
@@ -87,7 +94,7 @@ namespace RDGatewayAPI.Functions
 
             try
             {
-                var response = new { token = await TokenFactory.GetTokenAsync(host, port).ConfigureAwait(false) };
+                var response = new { token = await tokenService.GetTokenAsync(host, port).ConfigureAwait(false) };
 
                 TrackToken(trackTokenQueue, req.GetCorrelationId().GetValueOrDefault(executionContext.InvocationId), userId, response.token);
 
