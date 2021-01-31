@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Configuration;
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Azure.KeyVault;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using Microsoft.Azure.Services.AppAuthentication;
 using Newtonsoft.Json;
 
@@ -17,22 +19,22 @@ namespace RDGatewayAPI.Data
         private const string AUTH_TOKEN_PATTERN = "{0}&Signature=1|SHA256|{1}|{2}";
 
         private static readonly DateTime PosixBaseTime = new DateTime(1970, 1, 1, 0, 0, 0, 0);
-        private static readonly AzureServiceTokenProvider AzureManagementApiTokenProvider = new AzureServiceTokenProvider();
 
         public static async Task<X509Certificate2> GetCertificateAsync()
         {
-            var signCertificateUrl = default(string);
+            var signCertificateUrl = default(Uri);
 
             try
             {
-                signCertificateUrl = Environment.GetEnvironmentVariable("SignCertificateUrl");
+                signCertificateUrl = new Uri(Environment.GetEnvironmentVariable("SignCertificateUrl"), UriKind.Absolute);
 
-                // init a key vault client
-                KeyVaultClient keyVaultClient = new KeyVaultClient(new KeyVaultClient.AuthenticationCallback(AzureManagementApiTokenProvider.KeyVaultTokenCallback));
+                var secretClient = new SecretClient(new Uri(signCertificateUrl.GetLeftPart(UriPartial.Authority)), new DefaultAzureCredential());
+                var secretName = signCertificateUrl.Segments.Skip(1).FirstOrDefault();
+                var secretVersion = signCertificateUrl.Segments.Skip(2).FirstOrDefault();
 
                 // get the base64 encoded secret and decode
-                var signCertificateSecret = await keyVaultClient.GetSecretAsync(signCertificateUrl).ConfigureAwait(false);
-                var signCertificateBuffer = Convert.FromBase64String(signCertificateSecret.Value);
+                var signCertificateSecret = await secretClient.GetSecretAsync(secretName, secretVersion).ConfigureAwait(false);
+                var signCertificateBuffer = Convert.FromBase64String(signCertificateSecret.Value.Value);
 
                 // unwrap the json data envelope
                 var envelope = JsonConvert.DeserializeAnonymousType(Encoding.UTF8.GetString(signCertificateBuffer), new { data = string.Empty, password = string.Empty });
