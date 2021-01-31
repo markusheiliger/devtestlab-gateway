@@ -8,7 +8,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
-using Microsoft.Azure.Services.AppAuthentication;
 using Newtonsoft.Json;
 
 namespace RDGatewayAPI.Data
@@ -29,8 +28,8 @@ namespace RDGatewayAPI.Data
                 signCertificateUrl = new Uri(Environment.GetEnvironmentVariable("SignCertificateUrl"), UriKind.Absolute);
 
                 var secretClient = new SecretClient(new Uri(signCertificateUrl.GetLeftPart(UriPartial.Authority)), new DefaultAzureCredential());
-                var secretName = signCertificateUrl.Segments.Skip(1).FirstOrDefault();
-                var secretVersion = signCertificateUrl.Segments.Skip(2).FirstOrDefault();
+                var secretName = signCertificateUrl.Segments.Skip(2).FirstOrDefault()?.Trim('/');
+                var secretVersion = signCertificateUrl.Segments.Skip(3).FirstOrDefault()?.Trim('/');
 
                 // get the base64 encoded secret and decode
                 var signCertificateSecret = await secretClient.GetSecretAsync(secretName, secretVersion).ConfigureAwait(false);
