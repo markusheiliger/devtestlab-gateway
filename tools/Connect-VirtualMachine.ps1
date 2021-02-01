@@ -34,7 +34,7 @@ if (-not $GatewayHostname -or -not $GatewayCode) {
 $tokenServiceFullUrl = "$tokenServiceBaseUrl/host/$MachineHostname/port/$MachinePort" 
 
 $headers = @{
-    "x-ms-client-object-id" = (Get-AzureRmADUser -UserPrincipalName ((Get-AzureRmContext).Account.Id)).Id
+    "x-ms-client-object-id" = (az ad signed-in-user show --query "objectId" -o tsv)
     "x-functions-key" = $GatewayCode
 }
 

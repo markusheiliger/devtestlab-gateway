@@ -89,10 +89,13 @@
 		"artifactsContainerName": "artifacts",
 		"hostingPlanName": "[concat(variables('resourcePrefix'),'-hp')]",
 		"functionAppName": "[concat(variables('resourcePrefix'),'-fa')]",
+		"functionAppPrivate": true,
 		"appInsightsName": "[concat(variables('resourcePrefix'),'-ai')]",
 		"keyVaultName": "[concat(variables('resourcePrefix'),'-kv')]",
 		"keyVaultSecretSSLCertificate": "SSLCertificate",
 		"keyVaultSecretSignCertificate": "SignCertificate",
+		"privateDnsZoneName": "azurewebsites.net",
+		"privateDnsZoneGroup": "gateway",
 		"vnetName": "[concat(variables('resourcePrefix'),'-net')]",
 		"snetGatewayName": "RemoteDesktopGateway",
 		"subnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('snetGatewayName'))]",
@@ -316,6 +319,101 @@
 						"properties": {
 							"addressPrefix": "10.0.0.0/25",
 							"privateEndpointNetworkPolicies": "Disabled"
+						}
+					}
+				]
+			}
+		},
+		{
+			"condition": "[variables('functionAppPrivate')]",
+			"type": "Microsoft.Network/privateEndpoints",
+			"name": "[variables('functionAppName')]",
+			"apiVersion": "2019-11-01",
+			"location": "[resourceGroup().location]",
+			"dependsOn": [
+				"[resourceId('Microsoft.Web/sites', variables('functionAppName'))]",
+				"[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+			],
+			"properties": {
+				"subnet": {
+					"id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('snetGatewayName') )]"
+				},
+				"privateLinkServiceConnections": [
+					{
+						"name": "[variables('functionAppName')]",
+						"properties": {
+							"privateLinkServiceId": "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]",
+							"groupIds": [
+								"sites"
+							]
+						}
+					}
+				]
+			}
+		},
+		{
+			"condition": "[variables('functionAppPrivate')]",
+			"type": "Microsoft.Network/privateDnsZones",
+			"name": "[variables('privateDnsZoneName')]",
+			"apiVersion": "2020-01-01",
+			"location": "global",
+			"dependsOn": [
+				"[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+			],
+			"properties": ""
+		},
+		{
+			"condition": "[variables('functionAppPrivate')]",
+			"type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+			"name": "[concat(variables('privateDnsZoneName'), '/', variables('privateDnsZoneName'), '-link')]",
+			"apiVersion": "2020-01-01",
+			"location": "global",
+			"dependsOn": [
+				"[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]",
+				"[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+			],
+			"properties": {
+				"registrationEnabled": false,
+				"virtualNetwork": {
+					"id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+				}
+			}
+		},
+		{
+			"condition": "[variables('functionAppPrivate')]",
+			"type": "Microsoft.Network/privateDnsZones/A",
+			"name": "[concat(variables('privateDnsZoneName'),'/', variables('functionAppName'))]",
+			"location": "global",
+			"apiVersion": "2018-09-01",
+			"dependsOn": [
+				"[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]",
+				"[resourceId('Microsoft.Network/privateEndpoints', variables('functionAppName'))]"
+			],			
+			"properties": {
+                "ttl": 300,
+                "aRecords": [
+                    {
+                        "ipv4Address": "[reference(reference(resourceId('Microsoft.Network/privateEndpoints', variables('functionAppName')), '2020-11-01').networkInterfaces[0].id, '2020-11-01').ipConfigurations[0].privateIPAddress]"
+                    }
+                ]
+			}
+		},
+		{
+			"condition": "[variables('functionAppPrivate')]",
+			"type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+			"name": "[concat(variables('functionAppName'), '/', variables('privateDnsZoneGroup'))]",
+			"apiVersion": "2020-06-01",
+			"location": "[resourceGroup().location]",
+			"dependsOn": [
+				"[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]",
+				"[resourceId('Microsoft.Network/privateEndpoints', variables('functionAppName'))]"
+			],
+			"properties": {
+				"privateDnsZoneConfigs": [
+					{
+						"name": "config1",
+						"properties": {
+							"privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]"
 						}
 					}
 				]
