@@ -33,6 +33,31 @@ namespace RDGatewayAPI.Services
             this.cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
 
+        private static long GetExpirationTimestamp()
+        {
+            var tokenLifetime = Environment.GetEnvironmentVariable("TokenLifetime");
+            var endOfLife = DateTime.UtcNow.AddMinutes(1);
+
+            if (!string.IsNullOrEmpty(tokenLifetime))
+            {
+                try
+                {
+                    // parse token lifetime
+                    var duration = TimeSpan.Parse(tokenLifetime);
+
+                    // apply lifetime from configuration
+                    endOfLife = DateTime.UtcNow.Add(duration);
+                }
+                catch (Exception exc)
+                {
+                    throw new ConfigurationErrorsException($"Failed to parse token lifetime '{tokenLifetime}' from configuration", exc);
+                }
+            }
+
+            // return lifetime in posix format
+            return (long)endOfLife.Subtract(PosixBaseTime).TotalSeconds;
+        }
+
         public Task<X509Certificate2> GetCertificateAsync()
         {
             var signCertificateUrl = default(Uri);
@@ -71,43 +96,12 @@ namespace RDGatewayAPI.Services
             certificate ??= await GetCertificateAsync().ConfigureAwait(false);
 
             // create the machine token and sign the data
-            var machineToken = string.Format(CultureInfo.InvariantCulture, MACHINE_TOKEN_PATTERN, host, port, GetPosixLifetime());
+            var machineToken = string.Format(CultureInfo.InvariantCulture, MACHINE_TOKEN_PATTERN, host, port, GetExpirationTimestamp());
             var machineTokenBuffer = Encoding.ASCII.GetBytes(machineToken);
             var machineTokenSignature = certificate.GetRSAPrivateKey().SignData(machineTokenBuffer, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
             // wrap the machine token
             return string.Format(CultureInfo.InvariantCulture, AUTH_TOKEN_PATTERN, machineToken, certificate.Thumbprint, Uri.EscapeDataString(Convert.ToBase64String(machineTokenSignature)));
-
-            static long GetPosixLifetime()
-            {
-                DateTime endOfLife;
-
-                var tokenLifetime = Environment.GetEnvironmentVariable("TokenLifetime");
-
-                if (string.IsNullOrEmpty(tokenLifetime))
-                {
-                    // default lifetime is 1 minute
-                    endOfLife = DateTime.UtcNow.AddMinutes(1);
-                }
-                else
-                {
-                    try
-                    {
-                        // parse token lifetime
-                        var duration = TimeSpan.Parse(tokenLifetime);
-
-                        // apply lifetime from configuration
-                        endOfLife = DateTime.UtcNow.Add(duration);
-                    }
-                    catch (Exception exc)
-                    {
-                        throw new ConfigurationErrorsException($"Failed to parse token lifetime '{tokenLifetime}' from configuration", exc);
-                    }
-                }
-
-                // return lifetime in posix format
-                return (long)endOfLife.Subtract(PosixBaseTime).TotalSeconds;
-            }
         }
     }
 }
