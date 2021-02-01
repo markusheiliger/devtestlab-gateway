@@ -397,6 +397,26 @@
 							"idleTimeoutInMinutes": 4,
 							"loadDistribution": "SourceIPProtocol"
 						}
+					},
+										{
+						"name": "UDP3391",
+						"properties": {
+							"frontendIPConfiguration": {
+								"id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/frontendIPConfigurations/', variables('loadBalancerFrontEndName'))]"
+							},
+							"backendAddressPool": {
+								"id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/backendAddressPools/', variables('loadBalancerBackendName'))]"
+							},
+							"probe": {
+								"id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/probes/', variables('loadBalancerProbeName'))]"
+							},
+							"protocol": "Tcp",
+							"frontendPort": 3391,
+							"backendPort": 3391,
+							"enableFloatingIP": false,
+							"idleTimeoutInMinutes": 4,
+							"loadDistribution": "SourceIPProtocol"
+						}
 					}
 				],
 				"probes": [
