@@ -61,24 +61,6 @@
 			"metadata": {
 				"description": "Certificate thumbprint for identification in the local certificate store."
 			}
-		},
-		"_timestamp": {
-			"type": "string",
-			"defaultValue": "[utcNow('u')]"
-		},
-		"_artifactsLocation": {
-			"defaultValue": "",
-			"type": "string",
-			"metadata": {
-				"description": "The base URI where artifacts required by this template are located. When the template is deployed using the accompanying scripts, a private location in the subscription will be used and this value will be automatically generated."
-			}
-		},
-		"_artifactsLocationSasToken": {
-			"defaultValue": "",
-			"type": "securestring",
-			"metadata": {
-				"description": "The sasToken required to access _artifactsLocation. When the template is deployed using the accompanying scripts, a sasToken will be automatically generated."
-			}
 		}
 	},
 	"variables": {
@@ -87,6 +69,7 @@
 		"vmssName": "[concat(variables('resourcePrefix'),'-vmss')]",
 		"storageAccountName": "[replace(variables('resourcePrefix'), '-', '')]",
 		"artifactsContainerName": "artifacts",
+		"bastionHostName": "[concat(variables('resourcePrefix'), '-bh')]",
 		"hostingPlanName": "[concat(variables('resourcePrefix'),'-hp')]",
 		"functionAppName": "[concat(variables('resourcePrefix'),'-fa')]",
 		"appInsightsName": "[concat(variables('resourcePrefix'),'-ai')]",
@@ -96,12 +79,12 @@
 		"vnetName": "[concat(variables('resourcePrefix'),'-net')]",
 		"snetGatewayName": "RemoteDesktopGateway",
 		"subnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('snetGatewayName'))]",
-		"publicIPAddressName": "[concat(variables('resourcePrefix'),'-pip')]",
+		"publicIPLBName": "[concat(variables('resourcePrefix'),'-lb-pip')]",
+		"publicIPBHName": "[concat(variables('resourcePrefix'),'-bh-pip')]",
 		"loadBalancerName": "[concat(variables('resourcePrefix'),'-lb')]",
 		"loadBalancerFrontEndName": "gatewayFrontEnd",
 		"loadBalancerBackEndName": "gatewayBackEnd",
 		"loadBalancerProbeName": "gatewayProbe",
-		"loadBalancerNatPoolName": "gatewayNatPool",
 		"githubRepoUrl": "https://github.com/markusheiliger/devtestlab-gateway.git",
 		"githubRepoPath": "src/RDGatewayAPI",
 		"githubBranch": "master"
@@ -314,8 +297,13 @@
 					{
 						"name": "[variables('snetGatewayName')]",
 						"properties": {
-							"addressPrefix": "10.0.0.0/25",
-							"privateEndpointNetworkPolicies": "Disabled"
+							"addressPrefix": "10.0.0.0/25"
+						}
+					},
+					{
+						"name": "AzureBastionSubnet",
+						"properties": {
+							"addressPrefix": "10.0.0.128/25"
 						}
 					}
 				]
@@ -323,7 +311,7 @@
 		},
 		{
 			"type": "Microsoft.Network/publicIPAddresses",
-			"name": "[variables('publicIPAddressName')]",
+			"name": "[variables('publicIPLBName')]",
 			"location": "[resourceGroup().location]",
 			"apiVersion": "2017-04-01",
 			"properties": {
@@ -339,7 +327,7 @@
 			"location": "[resourceGroup().location]",
 			"apiVersion": "2017-04-01",
 			"dependsOn": [
-				"[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPAddressName'))]"
+				"[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPLBName'))]"
 			],
 			"properties": {
 				"frontendIPConfigurations": [
@@ -347,7 +335,7 @@
 						"name": "[variables('loadBalancerFrontEndName')]",
 						"properties": {
 							"publicIPAddress": {
-								"id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddressName'))]"
+								"id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPLBName'))]"
 							}
 						}
 					}
@@ -429,20 +417,6 @@
 							"numberOfProbes": "2"
 						}
 					}
-				],
-				"inboundNatPools": [
-					{
-						"name": "[variables('loadBalancerNatPoolName')]",
-						"properties": {
-							"frontendIPConfiguration": {
-								"id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/frontendIPConfigurations/', variables('loadBalancerFrontEndName'))]"
-							},
-							"protocol": "Tcp",
-							"frontendPortRangeStart": 50000,
-							"frontendPortRangeEnd": 50119,
-							"backendPort": 3389
-						}
-					}
 				]
 			}
 		},
@@ -462,7 +436,6 @@
 				"capacity": 0
 			},
 			"properties": {
-				"overprovision": "true",
 				"upgradePolicy": {
 					"mode": "Manual"
 				},
@@ -518,11 +491,6 @@
 													{
 														"id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', variables('loadBalancerName'), '/backendAddressPools/', variables('loadBalancerBackEndName'))]"
 													}
-												],
-												"loadBalancerInboundNatPools": [
-													{
-														"id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', variables('loadBalancerName'), '/inboundNatPools/', variables('loadBalancerNatPoolName'))]"
-													}
 												]
 											}
 										}
@@ -557,6 +525,43 @@
 					}
 				}
 			}
+		},
+		{
+			"type": "Microsoft.Network/publicIPAddresses",
+			"name": "[variables('publicIPBHName')]",
+			"location": "[resourceGroup().location]",
+			"apiVersion": "2019-11-01",
+			"sku": {
+                "name": "Standard"
+            },
+			"properties": {
+				"publicIPAllocationMethod": "Static"
+			}
+		},
+		{
+            "type": "Microsoft.Network/bastionHosts",
+            "name": "[variables('bastionHostName')]",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2020-05-01",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIpAddresses', variables('publicIPBHName'))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "IpConf",
+                        "properties": {
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), 'AzureBastionSubnet')]"
+                            },
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIpAddresses', variables('publicIPBHName'))]"
+                            }
+                        }
+                    }
+                ]
+            }
 		}
 	],
 	"outputs": {
@@ -578,11 +583,11 @@
 		},
 		"gatewayIP": {
 			"type": "string",
-			"value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddressName')), '2017-04-01').ipAddress]"
+			"value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPLBName')), '2017-04-01').ipAddress]"
 		},
 		"gatewayFQDN": {
 			"type": "string",
-			"value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddressName')), '2017-04-01').dnsSettings.fqdn]"
+			"value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPLBName')), '2017-04-01').dnsSettings.fqdn]"
 		}
 	}
 }
